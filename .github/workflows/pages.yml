@@ -1,0 +1,42 @@
+name: Deploy web to GitHub Pages
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: github-pages
+  cancel-in-progress: true
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - name: Set Pages base path
+        shell: bash
+        run: |
+          repo="${GITHUB_REPOSITORY#*/}"
+          owner="${GITHUB_REPOSITORY%%/*}"
+          if [[ "$repo" == "$owner.github.io" ]]; then
+            echo 'GITHUB_PAGES_BASE=/' >> "$GITHUB_ENV"
+          else
+            echo "GITHUB_PAGES_BASE=/$repo/" >> "$GITHUB_ENV"
+          fi
+      - run: npm ci
+      - run: npm run build
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: build
+      - id: deployment
+        uses: actions/deploy-pages@v4

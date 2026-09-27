@@ -506,7 +506,6 @@ export default function WordComponent({ word, onFinish }: { word: Word; onFinish
 
   return (
     <>
-      <InputHandler updateInput={updateInput} />
       {saveError && (
         <button className="my-btn-primary" onClick={() => setSaveRetry((value) => value + 1)}>
           记录保存失败，点击重试
@@ -543,6 +542,7 @@ export default function WordComponent({ word, onFinish }: { word: Word; onFinish
                   visible={hasWholeWordInput || getLetterVisible(index)}
                   state={wordState.letterStates[index]}
                   hiddenPlaceholder={isFullyHiddenDictation ? '' : '_'}
+                  wordLength={renderedLetterCount}
                 />
               )
             })}
@@ -580,6 +580,7 @@ export default function WordComponent({ word, onFinish }: { word: Word; onFinish
           )}
         </div>
       </div>
+      <InputHandler updateInput={updateInput} />
       <TipAlert className="fixed bottom-10 right-3" show={showTipAlert} setShow={setShowTipAlert} />
     </>
   )

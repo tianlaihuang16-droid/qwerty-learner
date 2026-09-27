@@ -1,4 +1,5 @@
 import KeyEventHandler from '../KeyEventHandler'
+import MobileInputHandler from '../MobileInputHandler'
 import TextAreaHandler from '../TextAreaHandler'
 import { currentDictInfoAtom } from '@/store'
 import { useAtomValue } from 'jotai'
@@ -7,13 +8,14 @@ import { useMemo } from 'react'
 
 export default function InputHandler({ updateInput }: { updateInput: (updateObj: WordUpdateAction) => void }) {
   const dictInfo = useAtomValue(currentDictInfoAtom)
+  const isPhone = window.matchMedia('(max-width: 600px)').matches
 
   const handler = useMemo(() => {
     switch (dictInfo.language) {
       case 'en':
-        return <KeyEventHandler updateInput={updateInput} />
+        return isPhone ? <MobileInputHandler updateInput={updateInput} /> : <KeyEventHandler updateInput={updateInput} />
       case 'de':
-        return <KeyEventHandler updateInput={updateInput} />
+        return isPhone ? <MobileInputHandler updateInput={updateInput} /> : <KeyEventHandler updateInput={updateInput} />
       case 'romaji':
         return <KeyEventHandler updateInput={updateInput} />
       case 'code':
@@ -21,7 +23,7 @@ export default function InputHandler({ updateInput }: { updateInput: (updateObj:
       default:
         return <TextAreaHandler updateInput={updateInput} />
     }
-  }, [dictInfo.language, updateInput])
+  }, [dictInfo.language, isPhone, updateInput])
 
   return <>{handler}</>
 }
@@ -30,7 +32,7 @@ export type WordUpdateAction = WordAddAction | WordDeleteAction | WordSubmitActi
 export type WordAddAction = {
   type: 'add'
   value: string
-  event: FormEvent<HTMLTextAreaElement> | KeyboardEvent
+  event: FormEvent<HTMLTextAreaElement> | FormEvent<HTMLInputElement> | KeyboardEvent
 }
 
 export type WordDeleteAction = {

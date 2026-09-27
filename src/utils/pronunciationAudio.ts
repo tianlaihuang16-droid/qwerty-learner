@@ -1,4 +1,4 @@
-import { deletePronunciationFile, getPronunciationFile, primeOfflinePronunciations, savePronunciationFile } from './pronunciationFiles'
+import { deletePronunciationFile, getPronunciationFile, primeOfflinePronunciations, pronunciationCandidates, savePronunciationFile } from './pronunciationFiles'
 import { balancedPronunciationBlob } from './pronunciationLoudness'
 import { Howl } from 'howler'
 
@@ -39,6 +39,29 @@ function getAudio(url: string) {
     entry = { users: 0, failed: false, ready: Promise.resolve() }
     const created = entry
     created.ready = (async () => {
+      if (!('__TAURI_IPC__' in window)) {
+        // A normal audio element may play cross-origin media even when fetch cannot read it.
+        // GitHub Pages has no server proxy, so prepare a playable URL without fetching its bytes.
+        for (const candidate of pronunciationCandidates(url)) {
+          if (created.disposed) return
+          const sound = new Howl({ src: [candidate.url], html5: true, format: ['mp3'], preload: false })
+          try {
+            await new Promise<void>((resolve, reject) => {
+              const timer = setTimeout(() => reject(new Error('Audio load timed out')), candidate.timeoutMs)
+              sound.once('load', () => { clearTimeout(timer); resolve() })
+              sound.once('loaderror', () => { clearTimeout(timer); reject(new Error('Audio unavailable')) })
+              sound.load()
+            })
+            if (created.disposed) { sound.unload(); return }
+            created.sound = sound
+            created.source = candidate.source
+            return
+          } catch {
+            sound.unload()
+          }
+        }
+        throw new Error('Pronunciation unavailable')
+      }
       const file = await getPronunciationFile(url)
       if (created.disposed) return
       const playableBlob = await balancedPronunciationBlob(file.blob)

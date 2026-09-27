@@ -25,7 +25,7 @@ import {
   randomConfigAtom,
   reviewModeInfoAtom,
 } from '@/store'
-import { IsDesktop, isLegal } from '@/utils'
+import { isLegal } from '@/utils'
 import { syncCloudProgress } from '@/utils/cloudSync'
 import { useSaveChapterRecord } from '@/utils/db'
 import { useMixPanelChapterLogUploader } from '@/utils/mixpanel'
@@ -90,17 +90,6 @@ const App: React.FC<{ restored?: TypingState }> = ({ restored }) => {
     setBatchDisplayState('loading')
     setupSignatureRef.current = ''
   }, [currentDictId])
-
-  useEffect(() => {
-    // 检测用户设备
-    if (!IsDesktop()) {
-      setTimeout(() => {
-        alert(
-          ' Qwerty Learner 目的为提高键盘工作者的英语输入效率，目前暂未适配移动端，希望您使用桌面端浏览器访问。如您使用的是 Ipad 等平板电脑设备，可以使用外接键盘使用本软件。',
-        )
-      }, 500)
-    }
-  }, [])
 
   // 在组件挂载和currentDictId改变时，检查当前字典是否存在，如果不存在，则将其重置为默认值
   useEffect(() => {
@@ -329,8 +318,8 @@ const App: React.FC<{ restored?: TypingState }> = ({ restored }) => {
           {audio.enabled && !state.isFinished && state.chapterData.words.length > 0 && (
             <div className="mt-3 text-center text-sm text-gray-500" data-testid="chapter-audio" aria-live="polite">
               {audio.complete
-                ? `本组读音已缓存 ${audio.ready}/${audio.total}`
-                : `正在后台缓存本组读音 ${audio.ready}/${audio.total}，未缓存好的词不会播放`}
+                ? `本组读音${'__TAURI_IPC__' in window ? '已缓存' : '可播放'} ${audio.ready}/${audio.total}`
+                : `正在后台${'__TAURI_IPC__' in window ? '缓存' : '准备'}本组读音 ${audio.ready}/${audio.total}，未准备好的词不会播放`}
               {audio.synthesized > 0 && <span> · {audio.synthesized} 词使用微软离线合成读音</span>}
               {audio.complete && audio.failed.length > 0 && (
                 <div className="mt-2 flex items-center justify-center gap-3">

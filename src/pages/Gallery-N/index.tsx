@@ -65,9 +65,9 @@ export default function GalleryPage() {
   return (
     <Layout>
       <GalleryContext.Provider value={{ state: galleryState, setState: setGalleryState }}>
-        <div className="relative mb-auto mt-auto flex w-full min-w-0 flex-1 flex-col overflow-y-auto px-6 md:px-12 xl:px-20">
+        <div className="relative mb-auto mt-auto flex w-full min-w-0 flex-1 flex-col overflow-y-auto px-3 sm:px-6 md:px-12 xl:px-20">
           <IconX className="absolute right-6 top-10 mr-2 h-7 w-7 cursor-pointer text-gray-400 md:right-12 xl:right-20" onClick={onBack} />
-          <div className="mt-20 flex w-full flex-1 flex-col items-center justify-center overflow-y-auto">
+          <div className="mt-10 flex w-full flex-1 flex-col items-center justify-center overflow-y-auto sm:mt-20">
             <div className="flex h-full w-full max-w-[100rem] flex-col overflow-y-auto">
               <div className="flex min-h-20 w-full flex-wrap items-center justify-between gap-3 pb-6">
                 <h1 className="text-xl font-semibold text-gray-700 dark:text-gray-200">词书</h1>

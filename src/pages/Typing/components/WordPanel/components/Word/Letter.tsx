@@ -23,16 +23,17 @@ export type LetterProps = {
   state?: LetterState
   visible?: boolean
   hiddenPlaceholder?: string
+  wordLength?: number
 }
 
-const Letter: React.FC<LetterProps> = ({ letter, state = 'normal', visible = true, hiddenPlaceholder = '_' }) => {
+const Letter: React.FC<LetterProps> = ({ letter, state = 'normal', visible = true, hiddenPlaceholder = '_', wordLength = 1 }) => {
   const fontSizeConfig = useAtomValue(fontSizeConfigAtom)
   return (
     <span
       className={`m-0 p-0 font-mono font-normal ${
         stateClassNameMap[(letter === EXPLICIT_SPACE) as unknown as string][state]
       } ${visible || hiddenPlaceholder ? 'pr-0.8' : ''} duration-0 dark:text-opacity-80`}
-      style={{ fontSize: fontSizeConfig.foreignFont.toString() + 'px' }}
+      style={{ fontSize: `min(${fontSizeConfig.foreignFont}px, 7vw, ${Math.floor(window.innerWidth * 0.75 / Math.max(1, wordLength))}px)` }}
     >
       {visible ? letter : hiddenPlaceholder}
     </span>

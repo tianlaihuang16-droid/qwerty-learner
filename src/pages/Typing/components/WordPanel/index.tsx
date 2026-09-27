@@ -154,11 +154,11 @@ export default function WordPanel({ feedbackTarget }: { feedbackTarget: HTMLDivE
 
   return (
     <div className="container flex h-full w-full flex-col items-center justify-center">
-      <div className="container flex h-24 w-full shrink-0 grow-0 justify-between px-12 pt-10">
+      <div className="container flex min-h-10 w-full shrink-0 grow-0 justify-between px-3 pt-1 sm:h-24 sm:px-12 sm:pt-10">
         {!training && isShowPrevAndNextWord && state.isTyping && (
           <>
             <PrevAndNextWord type="prev" />
-            <PrevAndNextWord type="next" />
+            <div className="hidden sm:block"><PrevAndNextWord type="next" /></div>
           </>
         )}
       </div>
@@ -166,15 +166,17 @@ export default function WordPanel({ feedbackTarget }: { feedbackTarget: HTMLDivE
         {currentWord && (
           <div className="relative flex w-full justify-center">
             {!state.isTyping && (
-              <div className="absolute flex h-full w-full justify-center">
+              <div className="pointer-events-none absolute flex h-full w-full justify-center">
                 <div className="z-10 flex w-full items-center backdrop-blur-sm">
                   <p className="w-full select-none text-center text-xl text-gray-600 dark:text-gray-50">
-                    {state.isAudioReady ? `按任意键${state.timerData.time ? '继续' : '开始'}` : '正在准备整组读音'}
+                    {state.isAudioReady ? (
+                      <><span className="sm:hidden">点击开始{state.timerData.time ? '继续' : '练习'}</span><span className="hidden sm:inline">按任意键{state.timerData.time ? '继续' : '开始'}</span></>
+                    ) : '正在准备整组读音'}
                   </p>
                 </div>
               </div>
             )}
-            <div className="relative">
+            <div className="relative max-w-full">
               <div className="mb-4 text-center text-sm text-gray-500" data-testid="spelling-status">
                 {state.spellingSession.activeRetry ? '错词穿插复练' : '本轮练习'} · 本轮进度 {state.spellingSession.mainCursor}/
                 {state.chapterData.words.length}
@@ -201,7 +203,7 @@ export default function WordPanel({ feedbackTarget }: { feedbackTarget: HTMLDivE
           </div>
         )}
       </div>
-      <Progress className={`mb-10 mt-auto ${state.isTyping ? 'opacity-100' : 'opacity-0'}`} />
+      <Progress className={`mb-4 mt-auto sm:mb-10 ${state.isTyping ? 'opacity-100' : 'opacity-0'}`} />
       {currentWord && blacklistedWords !== undefined && !isBlacklisted && !isPreviouslyLearned && feedbackTarget &&
         createPortal(
           <WordFeedbackControls word={currentWord} sourceDict={sourceDict} onBlacklisted={skipBlacklistedWord} />,

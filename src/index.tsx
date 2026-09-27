@@ -1,10 +1,12 @@
 import Loading from './components/Loading'
+import UsageGuide from './components/UsageGuide'
 import './index.css'
 import { ErrorBook } from './pages/ErrorBook'
 import MobilePage from './pages/Mobile'
 import TypingPage from './pages/Typing'
 import { isOpenDarkModeAtom } from '@/store'
 import { DATA_RESTORE_EVENT } from '@/utils/db/maintenance'
+import { loadLocalDictionaries } from '@/utils/localDictionaries'
 import { flushAlgorithmReviewPlan, initializeSpacedReviewSchedule } from '@/utils/db/spaced-review-service'
 import 'animate.css'
 import { useAtomValue } from 'jotai'
@@ -72,6 +74,7 @@ function Root() {
             <Route path="/mobile" element={isMobile ? <MobilePage /> : <Navigate to="/" replace />} />
           </Routes>
         </Suspense>
+        <UsageGuide />
       </HashRouter>
     </React.StrictMode>
   )
@@ -81,6 +84,11 @@ const container = document.getElementById('root')
 
 async function startApp() {
   appRoot?.render(<Loading />)
+  try {
+    await loadLocalDictionaries()
+  } catch (error) {
+    console.error('Failed to load local dictionaries', error)
+  }
   try {
     await initializeSpacedReviewSchedule()
   } catch (error) {

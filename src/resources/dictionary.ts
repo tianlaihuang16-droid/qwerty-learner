@@ -51,3 +51,28 @@ export function registerCloudDictionaryResources(resources: CloudDictionaryResou
     idDictionaryMap[dictionary.id] = dictionary
   }
 }
+
+export function registerLocalDictionaryResources(resources: Array<{ id: string; name: string; length: number }>) {
+  for (const item of resources) {
+    const resource: DictionaryResource = {
+      id: item.id,
+      name: item.name,
+      description: '保存在当前浏览器中的自定义辞书',
+      category: '我的辞书',
+      tags: ['本地导入'],
+      url: `local://${item.id}`,
+      length: item.length,
+      language: 'en',
+      languageCategory: 'en',
+    }
+    const resourceIndex = dictionaryResources.findIndex((entry) => entry.id === resource.id)
+    if (resourceIndex >= 0) dictionaryResources[resourceIndex] = resource
+    else dictionaryResources.push(resource)
+
+    const dictionary: Dictionary = { ...resource, chapterCount: calcChapterCount(resource.length) }
+    const dictionaryIndex = dictionaries.findIndex((entry) => entry.id === dictionary.id)
+    if (dictionaryIndex >= 0) dictionaries[dictionaryIndex] = dictionary
+    else dictionaries.push(dictionary)
+    idDictionaryMap[dictionary.id] = dictionary
+  }
+}

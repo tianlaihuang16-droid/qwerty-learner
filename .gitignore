@@ -4,3 +4,5 @@ build/
 .env.*
 *.log
 stats.html
+
+/tests/results/

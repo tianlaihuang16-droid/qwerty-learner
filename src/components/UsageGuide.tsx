@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 export const OPEN_USAGE_GUIDE_EVENT = 'qwerty-open-usage-guide'
-const SEEN_KEY = 'qwerty-web-usage-guide:v2'
+const SEEN_KEY = 'qwerty-web-usage-guide:v3'
 
 const dictionaryExample = `[
   { "name": "environment", "trans": ["环境"], "usphone": "ɪnˈvaɪrənmənt" },
@@ -22,6 +22,24 @@ export default function UsageGuide() {
   const [open, setOpen] = useState(() => !hasSeenGuide())
   const [page, setPage] = useState<0 | 1>(0)
 
+  const dialogRef = useRef<HTMLDialogElement>(null)
+  useEffect(() => {
+    const dialog = dialogRef.current
+    if (!open || !dialog) return
+    const previous = document.activeElement
+    dialog.showModal()
+    return () => {
+      dialog.close()
+      if (previous instanceof HTMLElement && previous.isConnected) previous.focus()
+    }
+  }, [open])
+
+  useEffect(() => {
+    if (!open || !dialogRef.current) return
+    dialogRef.current.scrollTop = 0
+    dialogRef.current.querySelector('h2')?.focus({ preventScroll: true })
+  }, [open, page])
+
   useEffect(() => {
     const show = () => { setPage(0); setOpen(true) }
     window.addEventListener(OPEN_USAGE_GUIDE_EVENT, show)
@@ -39,17 +57,19 @@ export default function UsageGuide() {
 
   if (!open) return null
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4" role="presentation">
-      <section role="dialog" aria-modal="true" aria-labelledby="usage-guide-title" className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-6 text-gray-800 shadow-2xl dark:bg-gray-800 dark:text-gray-100">
-        <p className="text-xs text-indigo-500">使用说明 {page + 1} / 2</p>
-        <h2 id="usage-guide-title" className="mt-2 text-2xl font-semibold">{page === 0 ? '欢迎使用 Qwerty Learner 网页版' : '辞书格式与 GPT 解读'}</h2>
+      <dialog ref={dialogRef} aria-modal="true" aria-labelledby="usage-guide-title" onCancel={(event) => { event.preventDefault(); dismiss() }} onKeyDown={(event) => event.stopPropagation()} className="max-h-[90vh] w-[calc(100%-2rem)] max-w-2xl overflow-y-auto rounded-2xl border-0 bg-white p-6 text-gray-800 shadow-2xl backdrop:bg-black/60 dark:bg-gray-800 dark:text-gray-100">
+        <div className="sticky top-0 z-10 flex items-center justify-between gap-4 bg-white py-2 dark:bg-gray-800">
+          <p className="text-xs text-indigo-500">新手指引 {page + 1} / 2</p>
+          <button type="button" onClick={dismiss} className="rounded-lg border border-gray-300 px-4 py-2 text-sm dark:border-gray-500">跳过</button>
+        </div>
+        <h2 id="usage-guide-title" tabIndex={-1} className="mt-2 text-2xl font-semibold">{page === 0 ? '欢迎使用 Qwerty Learner 网页版' : '辞书格式与 GPT 解读'}</h2>
         {page === 0 ? (
           <div className="mt-5 space-y-4 text-sm leading-6">
-            <p>这是听读音、拼写单词的练习页。先在「词书」页试用 CET-4 演示词书，或导入自己的英文辞书，再选择词书开始练习。</p>
+            <p>先选词书，再听音拼写，最后查看复习进度。准备好后就可以开始，指引随时可跳过。</p>
             <ol className="list-decimal space-y-2 pl-6">
-              <li>听到读音后输入完整单词；读音按钮可以重播。读音需要联网，若整组提示无读音可点「重试读音」或关闭发音继续练习。</li>
-              <li>电脑上可用键盘输入；手机上点「开始」后，点单词下方的输入框唤出键盘。拼写错误会记录为 Again；完成上一词后可用左箭头评 Easy、右箭头评 Hard，或点页面按钮；误触可用「手滑」修正最近一次错误。</li>
-              <li>学习记录和自定义辞书保存在当前浏览器。清除网站数据、换浏览器或换设备前，在练习页「设置 → 数据设置」导出学习记录，并单独保存原始辞书 JSON。</li>
+              <li><strong>选词书：</strong>点击顶部词书名称进入「词书」页，试用 CET-4 或导入辞书，选择「继续学习新词」。听到读音后输入完整单词；读音按钮可以重播。读音需要联网，若整组提示无读音可点「重试读音」或关闭发音继续练习。</li>
+              <li><strong>开始拼写：</strong>电脑上可用键盘输入；手机上点「开始」后，点单词下方的输入框唤出键盘。拼写错误会记录为 Again；完成上一词后可用左箭头评 Easy、右箭头评 Hard，或点页面按钮；误触可用「手滑」修正最近一次错误。</li>
+              <li><strong>复习与备份：</strong>回到词书页查看今日待复习任务。学习记录和自定义辞书保存在当前浏览器。清除网站数据、换浏览器或换设备前，在练习页「设置 → 数据设置」导出学习记录，并单独保存原始辞书 JSON。</li>
             </ol>
             <p>网页版没有账户同步。学习备份不会自动传到 GitHub；换设备时先导入原辞书，再导入学习备份。</p>
           </div>
@@ -72,11 +92,11 @@ export default function UsageGuide() {
             </div>
           </div>
         )}
+        <p className="mt-5 text-xs text-gray-500 dark:text-gray-400">跳过后不再自动弹出；可从词书页的「新手指引」重新查看。按 Esc 也可关闭。</p>
         <div className="mt-6 flex flex-wrap justify-end gap-3">
           {page === 1 && <button type="button" onClick={() => setPage(0)} className="rounded-lg border border-gray-300 px-4 py-2 text-sm dark:border-gray-500">上一页</button>}
           {page === 0 ? <button type="button" onClick={() => setPage(1)} className="my-btn-primary">下一页</button> : <button type="button" onClick={dismiss} className="my-btn-primary">开始使用</button>}
         </div>
-      </section>
-    </div>
+      </dialog>
   )
 }

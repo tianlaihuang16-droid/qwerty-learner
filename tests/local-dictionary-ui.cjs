@@ -23,7 +23,7 @@ async function main() {
     await guide.waitFor()
     await guide.getByRole('button', { name: '下一页' }).click()
     await page.getByRole('button', { name: '开始使用' }).click()
-    await page.getByRole('button', { name: '使用说明' }).click()
+    await page.getByRole('button', { name: '新手指引' }).click()
     await guide.waitFor()
     await guide.getByRole('button', { name: '下一页' }).click()
     await page.getByRole('button', { name: '开始使用' }).click()

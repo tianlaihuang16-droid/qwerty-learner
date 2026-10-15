@@ -66,7 +66,7 @@ export default function GalleryPage() {
                 <div className="mb-5 flex items-baseline justify-between gap-3">
                   <h2 className="text-xl font-semibold">我的词书</h2>
                   <div className="flex flex-wrap items-center gap-3">
-                    <button type="button" className="text-sm underline" onClick={() => window.dispatchEvent(new Event(OPEN_USAGE_GUIDE_EVENT))}>使用说明</button>
+                    <button type="button" className="text-sm underline" onClick={() => window.dispatchEvent(new Event(OPEN_USAGE_GUIDE_EVENT))}>新手指引</button>
                     <ImportDictionary />
                   </div>
                 </div>

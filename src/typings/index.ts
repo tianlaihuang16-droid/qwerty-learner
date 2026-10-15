@@ -21,6 +21,10 @@ export const PRONUNCIATION_PHONETIC_MAP: Pronunciation2PhoneticMap = {
 
 export type Word = {
   name: string
+  // 同一个词条接受的拼写；name 仍是记录、反馈和复习状态的身份。
+  spellings?: string[]
+  // GPT 提供的词根/音节切分；拼接必须等于 name，仅用于显示。
+  segments?: string[]
   trans: string[]
   usphone: string
   ukphone: string

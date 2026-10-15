@@ -14,7 +14,8 @@ import {
   reviewModeInfoAtom,
 } from '@/store'
 import { listBlacklistedWords } from '@/utils/db/word-feedback-service'
-import { serializedWordLearningKey, wordLearningIdentity } from '@/utils/db/word-learning-identity'
+import { listMissingReviewWordKeys } from '@/utils/db/spaced-review-service'
+import { serializedWordLearningKey, spacedReviewIdentity, wordLearningIdentity } from '@/utils/db/word-learning-identity'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { useAtomValue, useSetAtom } from 'jotai'
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
@@ -36,6 +37,12 @@ export default function WordPanel({ feedbackTarget }: { feedbackTarget: HTMLDivE
   const blacklistedWords = useLiveQuery(() => listBlacklistedWords(), [])
   const currentWordKey = currentWord ? serializedWordLearningKey(wordLearningIdentity(sourceDict, currentWord.name)) : undefined
   const isBlacklisted = blacklistedWords?.some((feedback) => serializedWordLearningKey(feedback) === currentWordKey) ?? false
+  const missingReviewKeys = useLiveQuery(() => reviewInfo.isReviewMode && reviewInfo.reviewRecord?.mode === 'spaced'
+    ? listMissingReviewWordKeys(reviewInfo.reviewRecord.words, reviewInfo.reviewRecord.dict)
+    : Promise.resolve<string[]>([]), [reviewInfo.reviewRecord?.id, reviewInfo.reviewRecord?.words])
+  const reviewWordKey = currentWord ? serializedWordLearningKey(spacedReviewIdentity(sourceDict, currentWord.name)) : undefined
+  const checkingReviewWords = reviewInfo.isReviewMode && reviewInfo.reviewRecord?.mode === 'spaced' && missingReviewKeys === undefined
+  const isMissingReviewWord = reviewWordKey !== undefined && missingReviewKeys?.includes(reviewWordKey) === true
   const skippedBlacklistedExposure = useRef('')
   const exposureKey = `${state.spellingSession.id}:${state.chapterData.index}:${state.spellingSession.activeRetry?.key ?? 'main'}`
   const skipBlacklistedWord = useCallback(() => {
@@ -47,6 +54,9 @@ export default function WordPanel({ feedbackTarget }: { feedbackTarget: HTMLDivE
   useEffect(() => {
     if (isBlacklisted) skipBlacklistedWord()
   }, [isBlacklisted, skipBlacklistedWord])
+  useEffect(() => {
+    if (isMissingReviewWord) skipBlacklistedWord()
+  }, [isMissingReviewWord, skipBlacklistedWord])
   const wordComponentKey = `${state.spellingSession.id}:${state.chapterData.index}:${state.spellingSession.loopCompleted}:${
     state.spellingSession.retryCompleted
   }:${state.spellingSession.activeRetry?.key ?? 'main'}`
@@ -154,7 +164,7 @@ export default function WordPanel({ feedbackTarget }: { feedbackTarget: HTMLDivE
 
   return (
     <div className="container flex h-full w-full flex-col items-center justify-center">
-      <div className="container flex min-h-10 w-full shrink-0 grow-0 justify-between px-3 pt-1 sm:h-24 sm:px-12 sm:pt-10">
+      <div className="practice-word-navigation container flex h-24 w-full shrink-0 grow-0 justify-between px-12 pt-10">
         {!training && isShowPrevAndNextWord && state.isTyping && (
           <>
             <PrevAndNextWord type="prev" />
@@ -183,10 +193,10 @@ export default function WordPanel({ feedbackTarget }: { feedbackTarget: HTMLDivE
                 {' · '}已复练 {state.spellingSession.retryCompleted} 次 · 待复练{' '}
                 {state.spellingSession.pending.length + (state.spellingSession.activeRetry ? 1 : 0)} 词
               </div>
-              {blacklistedWords === undefined ? (
+              {blacklistedWords === undefined || checkingReviewWords ? (
                 <p className="text-sm text-gray-500">正在检查词条反馈…</p>
-              ) : isBlacklisted || isPreviouslyLearned ? (
-                <p className="text-sm text-gray-500">{isBlacklisted ? '已拉黑' : '已学习'}，正在跳过…</p>
+              ) : isBlacklisted || isPreviouslyLearned || isMissingReviewWord ? (
+                <p className="text-sm text-gray-500">{isBlacklisted ? '已拉黑' : isMissingReviewWord ? '词书已无此词' : '已学习'}，正在跳过…</p>
               ) : (
                 <>
                   <WordComponent word={currentWord} onFinish={onFinish} key={wordComponentKey} />
@@ -203,10 +213,10 @@ export default function WordPanel({ feedbackTarget }: { feedbackTarget: HTMLDivE
           </div>
         )}
       </div>
-      <Progress className={`mb-4 mt-auto sm:mb-10 ${state.isTyping ? 'opacity-100' : 'opacity-0'}`} />
-      {currentWord && blacklistedWords !== undefined && !isBlacklisted && !isPreviouslyLearned && feedbackTarget &&
+      <Progress className={`mb-10 mt-auto ${state.isTyping ? 'opacity-100' : 'opacity-0'}`} />
+      {currentWord && blacklistedWords !== undefined && !checkingReviewWords && !isMissingReviewWord && !isBlacklisted && !isPreviouslyLearned && feedbackTarget &&
         createPortal(
-          <WordFeedbackControls word={currentWord} sourceDict={sourceDict} onBlacklisted={skipBlacklistedWord} />,
+          <WordFeedbackControls key={currentWordKey} word={currentWord} sourceDict={sourceDict} onSkip={skipBlacklistedWord} />,
           feedbackTarget,
         )}
     </div>

@@ -31,6 +31,14 @@ export function setWordBlacklisted(dictID: string, word: string, blacklisted: bo
   return applyWordFeedback(dictID, word, { type: 'blacklist', value: blacklisted })
 }
 
+export function setWordNeedsWritingExample(dictID: string, word: string, value: boolean) {
+  return applyWordFeedback(dictID, word, { type: 'writing-use', value })
+}
+
+export function setWordHelpful(dictID: string, word: string, value: boolean) {
+  return applyWordFeedback(dictID, word, { type: 'helpful', value })
+}
+
 export function markWordNotHelpful(dictID: string, word: string) {
   return applyWordFeedback(dictID, word, { type: 'not-helpful' })
 }

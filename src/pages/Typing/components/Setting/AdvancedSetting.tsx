@@ -1,3 +1,4 @@
+import FsrsSetting from './FsrsSetting'
 import styles from './index.module.css'
 import {
   isIgnoreCaseAtom,
@@ -140,6 +141,7 @@ export default function AdvancedSetting() {
               }`}</span>
             </div>
           </div>
+          <FsrsSetting />
         </div>
       </ScrollArea.Viewport>
       <ScrollArea.Scrollbar className="flex touch-none select-none bg-transparent " orientation="vertical"></ScrollArea.Scrollbar>

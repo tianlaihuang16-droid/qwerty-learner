@@ -6,7 +6,7 @@ import { TipAlert } from './TipAlert'
 import style from './index.module.css'
 import { initialWordState } from './type'
 import type { WordState } from './type'
-import { compareWholeWordInput, editWholeWordInput } from './wholeWordInput'
+import { alignWholeWordInput, diffWholeWordInput, editWholeWordInput } from './wholeWordInput'
 import Tooltip from '@/components/Tooltip'
 import type { WordPronunciationIconRef } from '@/components/WordPronunciationIcon'
 import { WordPronunciationIcon } from '@/components/WordPronunciationIcon'
@@ -27,9 +27,12 @@ import {
 import type { Word } from '@/typings'
 import { CTRL, getUtcStringForMixpanel } from '@/utils'
 import { useSaveWordRecord } from '@/utils/db'
+import { acceptedEnglishSpellings, matchingSpelling } from '@/utils/englishSpellingVariants'
 import { SpellingRecorder, practiceWordKey } from '@/utils/spellingPractice'
+import { segmentationExplanationUrl, wordSegmentBoundaries } from '@/utils/wordSegments'
+import { open } from '@tauri-apps/api/shell'
 import { useAtomValue } from 'jotai'
-import { useCallback, useContext, useEffect, useRef, useState } from 'react'
+import { Fragment, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { useHotkeys } from 'react-hotkeys-hook'
 import { useImmer } from 'use-immer'
 
@@ -50,14 +53,21 @@ export default function WordComponent({ word, onFinish }: { word: Word; onFinish
   const isTextSelectable = useAtomValue(isTextSelectableAtom)
   const isIgnoreCase = useAtomValue(isIgnoreCaseAtom)
   const isShowAnswerOnHover = useAtomValue(isShowAnswerOnHoverAtom)
-  const isWholeWordSubmit = useAtomValue(isWholeWordSubmitAtom)
+  const savedWholeWordSubmit = useAtomValue(isWholeWordSubmitAtom)
   const saveWordRecord = useSaveWordRecord()
   // const wordLogUploader = useMixPanelWordLogUploader(state)
   const [playKeySound, playBeepSound, playHintSound] = useKeySounds()
   const pronunciationIsOpen = useAtomValue(pronunciationIsOpenAtom)
   const [isHoveringWord, setIsHoveringWord] = useState(false)
+  const [browserOpenError, setBrowserOpenError] = useState(false)
   const currentLanguage = useAtomValue(currentDictInfoAtom).language
   const currentLanguageCategory = useAtomValue(currentDictInfoAtom).languageCategory
+  const acceptedSpellings = useMemo(() => acceptedEnglishSpellings(word.name.replaceAll(' ', EXPLICIT_SPACE).replaceAll('…', '..'),
+    currentLanguage, word.spellings?.map(spelling => spelling.replaceAll(' ', EXPLICIT_SPACE).replaceAll('…', '..'))),
+    [word.name, word.spellings, currentLanguage])
+  // A valid short spelling must not finish before the user can enter its longer variant.
+  const isWholeWordSubmit = savedWholeWordSubmit || acceptedSpellings.some(short =>
+    acceptedSpellings.some(long => long.length > short.length && long.startsWith(short)))
   const currentChapter = useAtomValue(currentChapterAtom)
 
   const [showTipAlert, setShowTipAlert] = useState(false)
@@ -126,7 +136,9 @@ export default function WordComponent({ word, onFinish }: { word: Word; onFinish
       if (attempt.error) {
         newWordState.wrongCount++
         newWordState.lastErrorSlip = Boolean(attempt.error.isSlip)
+        newWordState.lastWrongWord = attempt.input
         const { position, actual } = attempt.error
+        newWordState.lastWrongInput = actual
         ;(newWordState.letterMistake[position] ??= []).push(actual)
       }
     }
@@ -279,34 +291,40 @@ export default function WordComponent({ word, onFinish }: { word: Word; onFinish
         return
       }
 
-      const comparison = compareWholeWordInput(wordState.inputWord, wordState.displayWord, isIgnoreCase)
+      const accepted = matchingSpelling(wordState.inputWord, acceptedSpellings, isIgnoreCase)
+      const differences = accepted ? [] : diffWholeWordInput(wordState.inputWord, wordState.displayWord, isIgnoreCase)
+      const firstError = differences[0]
+      const correct = differences.length === 0
       const expectedForRecord = wordState.displayWord.replaceAll(EXPLICIT_SPACE, ' ')
-      recorder.current?.finishDraft(comparison.correct, expectedForRecord, comparison.mismatchIndex)
+      recorder.current?.finishDraft(correct, expectedForRecord, firstError?.position ?? -1,
+        firstError && { position: firstError.position, expected: firstError.expected.replaceAll(EXPLICIT_SPACE, ' '), actual: firstError.actual.replaceAll(EXPLICIT_SPACE, ' ') })
       if (recorder.current) dispatch({ type: TypingStateActionType.SET_SPELLING_DRAFT, trace: recorder.current.snapshot() })
 
-      if (comparison.correct) {
+      if (correct) {
         setWordState((state) => {
+          if (accepted) state.displayWord = accepted
           state.letterStates = new Array(state.displayWord.length).fill('correct')
-          state.correctCount += state.displayWord.length
+          state.correctCount += state.inputWord.length
           state.isFinished = true
           state.endTime = getUtcStringForMixpanel()
         })
-        for (let index = 0; index < wordState.displayWord.length; index++) {
+        for (let index = 0; index < wordState.inputWord.length; index++) {
           dispatch({ type: TypingStateActionType.REPORT_CORRECT_WORD })
         }
         playHintSound()
         return
       }
 
-      const mismatchIndex = comparison.mismatchIndex
-      const actualChar = wordState.inputWord[mismatchIndex] === EXPLICIT_SPACE ? ' ' : wordState.inputWord[mismatchIndex] ?? ''
+      const mismatchIndex = firstError.position
+      const actualChar = firstError.actual.replaceAll(EXPLICIT_SPACE, ' ')
       playBeepSound()
       setWordState((state) => {
-        state.letterStates[mismatchIndex] = 'wrong'
+        if (firstError.type !== 'missing') state.letterStates[mismatchIndex] = 'wrong'
         state.hasWrong = true
         state.hasMadeInputWrong = true
         state.wrongCount += 1
         state.lastWrongInput = actualChar
+        state.lastWrongWord = state.inputWord.replaceAll(EXPLICIT_SPACE, ' ')
         state.lastErrorSlip = false
         state.letterTimeArray = []
         ;(state.letterMistake[mismatchIndex] ??= []).push(actualChar)
@@ -315,6 +333,7 @@ export default function WordComponent({ word, onFinish }: { word: Word; onFinish
       if (currentChapter === 0 && state.chapterData.index === 0 && wordState.wrongCount >= 3) setShowTipAlert(true)
     },
     [
+      acceptedSpellings,
       currentChapter,
       dispatch,
       finishAudioTiming,
@@ -346,11 +365,10 @@ export default function WordComponent({ word, onFinish }: { word: Word; onFinish
     }
 
     const inputChar = wordState.inputWord[inputLength - 1]
-    const correctChar = wordState.displayWord[inputLength - 1]
-    let isEqual = false
-    if (inputChar != undefined && correctChar != undefined) {
-      isEqual = isIgnoreCase ? inputChar.toLowerCase() === correctChar.toLowerCase() : inputChar === correctChar
-    }
+    const candidate = matchingSpelling(wordState.inputWord, acceptedSpellings, isIgnoreCase, true)
+    const correctChar = (candidate ?? wordState.displayWord)[inputLength - 1]
+    const isEqual = candidate !== undefined
+    const completed = matchingSpelling(wordState.inputWord, acceptedSpellings, isIgnoreCase) !== undefined
     processedInput.current = wordState.inputWord
     const visibility =
       !wordDictationConfig.isOpen || (isShowAnswerOnHover && isHoveringWord)
@@ -363,7 +381,7 @@ export default function WordComponent({ word, onFinish }: { word: Word; onFinish
       correctChar === EXPLICIT_SPACE ? ' ' : correctChar,
       isEqual,
       visibility,
-      isEqual && inputLength >= wordState.displayWord.length,
+      isEqual && completed,
       getLetterVisible(inputLength - 1),
     )
     if (recorder.current) dispatch({ type: TypingStateActionType.SET_SPELLING_DRAFT, trace: recorder.current.snapshot() })
@@ -371,11 +389,15 @@ export default function WordComponent({ word, onFinish }: { word: Word; onFinish
     if (isEqual) {
       // 输入正确时
       setWordState((state) => {
+        if (candidate && candidate !== state.displayWord) {
+          state.displayWord = candidate
+          state.letterStates = candidate.split('').map((_, index) => index < inputLength ? 'correct' : 'normal')
+        }
         state.letterTimeArray.push(Date.now())
         state.correctCount += 1
       })
 
-      if (inputLength >= wordState.displayWord.length) {
+      if (completed) {
         // 完成输入时
         setWordState((state) => {
           state.letterStates[inputLength - 1] = 'correct'
@@ -425,7 +447,7 @@ export default function WordComponent({ word, onFinish }: { word: Word; onFinish
   }, [dispatch, setWordState])
 
   useEffect(() => {
-    if (!state.isTyping || wordState.lastWrongInput === null || wordState.lastErrorSlip) return
+    if (!state.isTyping || wordState.lastWrongInput === null || wordState.lastErrorSlip || (!wordState.hasWrong && wordState.inputWord.length > 0)) return
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'ArrowDown' || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return
       event.preventDefault()
@@ -433,7 +455,7 @@ export default function WordComponent({ word, onFinish }: { word: Word; onFinish
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [markSlip, state.isTyping, wordState.lastErrorSlip, wordState.lastWrongInput])
+  }, [markSlip, state.isTyping, wordState.hasWrong, wordState.inputWord.length, wordState.lastErrorSlip, wordState.lastWrongInput])
 
   useEffect(() => {
     if (wordState.hasWrong) {
@@ -500,9 +522,21 @@ export default function WordComponent({ word, onFinish }: { word: Word; onFinish
   }, [wordState.wrongCount, dispatch])
 
   const isFullyHiddenDictation = wordDictationConfig.isOpen && wordDictationConfig.type === 'hideAll'
+  const wholeWordDifferences = useMemo(() =>
+    wordState.lastWrongWord === null ? [] : diffWholeWordInput(wordState.lastWrongWord, wordState.displayWord.replaceAll(EXPLICIT_SPACE, ' '), isIgnoreCase),
+  [wordState.lastWrongWord, wordState.displayWord, isIgnoreCase])
+  const wholeWordColumns = useMemo(() =>
+    wordState.lastWrongWord === null ? [] : alignWholeWordInput(wordState.lastWrongWord, wordState.displayWord.replaceAll(EXPLICIT_SPACE, ' '), isIgnoreCase),
+  [wordState.lastWrongWord, wordState.displayWord, isIgnoreCase])
   const renderedLetterCount = isWholeWordSubmit
     ? Math.max(wordState.displayWord.length, wordState.inputWord.length)
     : wordState.displayWord.length
+
+  const segmentBoundaries = wordSegmentBoundaries(wordState.displayWord, word.segments)
+  const showSegments = segmentBoundaries.length > 0 &&
+    Array.from(wordState.displayWord).every((_, index) => getLetterVisible(index)) &&
+    (!isWholeWordSubmit || wordState.inputWord.length === 0 || wordState.inputWord === wordState.displayWord)
+  const explanationUrl = showSegments && word.segments ? segmentationExplanationUrl(word.name, word.segments) : undefined
 
   return (
     <>
@@ -519,31 +553,53 @@ export default function WordComponent({ word, onFinish }: { word: Word; onFinish
         className="flex flex-col items-center justify-center pb-1 pt-4"
       >
         {['romaji', 'hapin'].includes(currentLanguage) && word.notation && <Notation notation={word.notation} />}
+        {isWholeWordSubmit && !savedWholeWordSubmit && <p className="mb-2 text-xs text-gray-500">英美拼写均可 · 空格提交</p>}
         <div
           className={`tooltip-info relative w-fit bg-transparent p-0 leading-normal shadow-none dark:bg-transparent ${
             wordDictationConfig.isOpen ? 'tooltip' : ''
           }`}
           data-tip="按 Tab 快捷键显示完整单词"
         >
-          <div
+          <a
+            href={explanationUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            title={explanationUrl ? '点击让 ChatGPT 解释切分原理' : undefined}
+            onClick={(event) => {
+              if (!explanationUrl) return
+              event.stopPropagation()
+              if ('__TAURI_IPC__' in window) {
+                event.preventDefault()
+                setBrowserOpenError(false)
+                void open(explanationUrl).catch((error) => {
+                  console.error('Could not open segmentation explanation', error)
+                  setBrowserOpenError(true)
+                })
+              }
+            }}
             onMouseEnter={() => handleHoverWord(true)}
             onMouseLeave={() => handleHoverWord(false)}
             className={`relative flex items-center ${isTextSelectable && 'select-all'} justify-center ${
               isFullyHiddenDictation ? 'min-h-[4rem] min-w-[12rem] pb-2' : ''
-            } ${wordState.hasWrong ? style.wrong : ''}`}
+            } ${explanationUrl ? 'cursor-pointer rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500' : ''} ${wordState.hasWrong ? style.wrong : ''}`}
           >
             {Array.from({ length: renderedLetterCount }, (_, index) => {
               const hasWholeWordInput = isWholeWordSubmit && index < wordState.inputWord.length
               const letter = hasWholeWordInput ? wordState.inputWord[index] : wordState.displayWord[index] ?? ''
               return (
+                <Fragment key={`${index}-${letter}`}>
+                {showSegments && segmentBoundaries.includes(index) && (
+                  <span data-testid="word-segment-boundary" aria-hidden="true"
+                    className="mx-1 h-7 self-center border-l-2 border-indigo-300 dark:border-indigo-500" />
+                )}
                 <Letter
-                  key={`${index}-${letter}`}
                   letter={letter}
                   visible={hasWholeWordInput || getLetterVisible(index)}
-                  state={wordState.letterStates[index]}
+                  state={isWholeWordSubmit ? 'normal' : wordState.letterStates[index]}
                   hiddenPlaceholder={isFullyHiddenDictation ? '' : '_'}
                   wordLength={renderedLetterCount}
                 />
+                </Fragment>
               )
             })}
             {isFullyHiddenDictation && (
@@ -552,10 +608,56 @@ export default function WordComponent({ word, onFinish }: { word: Word; onFinish
                 className="pointer-events-none absolute bottom-0 left-1/2 w-[12rem] -translate-x-1/2 border-b-2 border-gray-400/70 dark:border-gray-500"
               />
             )}
-          </div>
-          {wordState.lastWrongInput !== null && (
+          </a>
+          {browserOpenError && <p role="alert" className="mt-2 text-center text-sm text-red-600">浏览器未打开，请再次点击切分单词</p>}
+          {wordState.lastWrongInput !== null && (wordState.hasWrong || wordState.inputWord.length === 0) && (
             <div className="mt-2 flex items-center justify-center gap-2 text-sm font-medium text-red-600 dark:text-red-400" aria-live="polite">
-              <span>上次误输入：{wordState.lastWrongInput === '' ? '漏输入' : wordState.lastWrongInput === ' ' ? '空格' : wordState.lastWrongInput}</span>
+              <div className="flex flex-col items-center break-all">
+                {isWholeWordSubmit && wordState.lastWrongWord !== null ? (
+                  <>
+                    <span className="text-xs text-gray-500 dark:text-gray-400">上次错拼 · {acceptedSpellings.length > 1 ? '下方拼写均可' : '下方为正确拼写'}</span>
+                    <div data-testid="whole-word-comparison" className="mt-1 max-w-[min(90vw,42rem)] overflow-x-auto rounded-xl bg-slate-50 px-4 py-3 dark:bg-slate-800">
+                      <div className="flex w-max min-w-full justify-center font-mono text-2xl font-semibold leading-tight sm:text-3xl" aria-label={`上次输入 ${wordState.lastWrongWord}，正确拼写 ${wordState.displayWord.replaceAll(EXPLICIT_SPACE, ' ')}`}>
+                        {wholeWordColumns.map((column, index) => (
+                          <span key={index} className="inline-flex w-[1ch] shrink-0 flex-col items-center">
+                            <span data-difference={column.type} className={column.type === 'match' ? 'text-teal-600 dark:text-teal-400' : 'text-red-500 dark:text-red-400'}>
+                              {column.actual || '·'}
+                            </span>
+                            <span className="mt-2 text-teal-600 dark:text-teal-400">{column.expected || '\u00a0'}</span>
+                          </span>
+                        ))}
+                      </div>
+                      {acceptedSpellings.length > 1 && (
+                        <div data-testid="accepted-spellings" className="mt-2 text-center font-mono text-2xl font-semibold text-teal-600 dark:text-teal-400 sm:text-3xl">
+                          {acceptedSpellings.filter(spelling => spelling !== wordState.displayWord).map(spelling => (
+                            <div key={spelling}>{spelling.replaceAll(EXPLICIT_SPACE, ' ')}</div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <span className="sr-only">上次输错的单词：{wordState.lastWrongWord}</span>
+                    <div className="sr-only">
+                      {wholeWordDifferences.map((difference, index) => (
+                        <span key={`${difference.position}-${index}`}>
+                          第{difference.position + 1}位：{difference.type === 'missing' ? `漏写 ${difference.expected}` :
+                            difference.type === 'extra' ? `多写 ${difference.actual}` :
+                            `把 ${difference.expected} 写成 ${difference.actual}`}
+                        </span>
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <span>上次误输入：{wordState.lastWrongInput === '' ? '漏输入' : wordState.lastWrongInput === ' ' ? '空格' : wordState.lastWrongInput}</span>
+                    {acceptedSpellings.length > 1 && (
+                      <div data-testid="accepted-spellings" className="mt-2 text-center font-mono text-2xl font-semibold text-teal-600 dark:text-teal-400 sm:text-3xl">
+                        <span className="block font-sans text-xs text-gray-500 dark:text-gray-400">正确拼写（均可）</span>
+                        {acceptedSpellings.map(spelling => <div key={spelling}>{spelling.replaceAll(EXPLICIT_SPACE, ' ')}</div>)}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
               <button type="button" onClick={markSlip} disabled={wordState.lastErrorSlip}
                 className="rounded border border-current px-2 py-0.5 disabled:opacity-60">
                 {wordState.lastErrorSlip ? '已标记手滑' : '手滑 ↓'}
@@ -580,7 +682,7 @@ export default function WordComponent({ word, onFinish }: { word: Word; onFinish
           )}
         </div>
       </div>
-      <InputHandler updateInput={updateInput} />
+      <InputHandler updateInput={updateInput} wholeWordSubmit={isWholeWordSubmit} />
       <TipAlert className="fixed bottom-10 right-3" show={showTipAlert} setShow={setShowTipAlert} />
     </>
   )

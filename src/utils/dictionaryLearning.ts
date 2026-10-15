@@ -40,6 +40,7 @@ export async function loadDictionaryLearningProgress(
   words: Word[],
   readStates: (keys: [string, string][]) => Promise<(ProgressStoredState | undefined)[]>,
   now: number,
+  excludedKeys: ReadonlySet<string> = new Set(),
 ): Promise<{ progress: DictionaryLearningProgress; learnedKeys: ReadonlySet<string> }> {
   const keys = dictionaryLearningKeys(dictID, words)
   const states = await readStates(keys)
@@ -53,7 +54,7 @@ export async function loadDictionaryLearningProgress(
     stateByKey.set(key, state)
   }
 
-  return { progress: summarizeDictionaryLearning(dictID, words, stateByKey, now), learnedKeys }
+  return { progress: summarizeDictionaryLearning(dictID, words, stateByKey, now, excludedKeys), learnedKeys }
 }
 
 export function classifyDictionaryLearningState(state: ProgressState | undefined, now: number): DictionaryLearningStatus {
@@ -68,6 +69,7 @@ export function summarizeDictionaryLearning(
   words: Word[],
   stateByKey: ReadonlyMap<string, ProgressState>,
   now: number,
+  excludedKeys: ReadonlySet<string> = new Set(),
 ): DictionaryLearningProgress {
   const progress: DictionaryLearningProgress = {
     total: 0,
@@ -83,12 +85,46 @@ export function summarizeDictionaryLearning(
     const key = serializedWordLearningKey(spacedReviewIdentity(dictID, word.name))
     if (seen.has(key)) continue
     seen.add(key)
+    if (excludedKeys.has(key)) continue
     progress.total += 1
     const state = stateByKey.get(key)
     progress[classifyDictionaryLearningState(state, now)] += 1
     if (state) progress.stages[state.stage] += 1
   }
 
+  return progress
+}
+
+export function summarizeGlobalLearning(
+  entries: ReadonlyArray<{ dictID: string; words: Word[] }>,
+  stateByKey: ReadonlyMap<string, ProgressState>,
+  effectiveDueAtByKey: ReadonlyMap<string, number>,
+  excludedKeys: ReadonlySet<string>,
+  now: number,
+): DictionaryLearningProgress {
+  const progress: DictionaryLearningProgress = {
+    total: 0, unlearned: 0, learning: 0, due: 0, mastered: 0,
+    stages: Array.from({ length: EBBINGHAUS_INTERVAL_MINUTES.length }, () => 0),
+  }
+  const seen = new Set<string>()
+  for (const { dictID, words } of entries) {
+    for (const word of words) {
+      const key = serializedWordLearningKey(spacedReviewIdentity(dictID, word.name))
+      if (seen.has(key)) continue
+      seen.add(key)
+      if (excludedKeys.has(key)) continue
+      progress.total += 1
+      const state = stateByKey.get(key)
+      if (!state) {
+        progress.unlearned += 1
+        continue
+      }
+      const effectiveDueAt = effectiveDueAtByKey.get(key)
+      const status = classifyDictionaryLearningState({ ...state, nextReviewAt: effectiveDueAt ?? state.nextReviewAt }, now)
+      progress[status] += 1
+      progress.stages[state.stage] += 1
+    }
+  }
   return progress
 }
 

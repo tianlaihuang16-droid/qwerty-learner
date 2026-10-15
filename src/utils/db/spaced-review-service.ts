@@ -5,8 +5,9 @@ import { ReviewRecord } from './record'
 import type { ISpacedReviewState, IWordRecord, ReviewWord } from './record'
 import { orderedReviewSources, selectAdjustmentForState } from './review-source'
 import type { ReviewAdjustment } from './review-source'
-import { EBBINGHAUS_INTERVAL_MINUTES, SPACED_REVIEW_ALGORITHM, calculateSpacedReviewState, decideSpacedReview, nextFsrsCard } from './spaced-repetition'
+import { EBBINGHAUS_INTERVAL_MINUTES, SPACED_REVIEW_ALGORITHM, calculateSpacedReviewState, canManuallyRateSpelling, decideSpacedReview, nextFsrsCard } from './spaced-repetition'
 import { calculateSpacedReviewState as calculateLegacyReviewState } from './legacy-spaced-repetition'
+import { weightsForDecision } from './fsrs-parameters'
 import type { IWordFeedback } from './word-feedback'
 import {
   isDictionaryScopedReview,
@@ -17,7 +18,7 @@ import {
 } from './word-learning-identity'
 import { idDictionaryMap } from '@/resources/dictionary'
 import { appendCloudStudyEvent, readGptReviewAdjustments, writeAlgorithmReviewPlan } from '@/utils/cloudSync'
-import { wordListFetcher } from '@/utils/wordListFetcher'
+import { dictionaryWordCache } from '@/utils/wordListFetcher'
 
 const DAY_SECONDS = 24 * 60 * 60
 const MAX_REVIEW_WORDS_PER_SESSION = 30
@@ -113,20 +114,44 @@ export async function getEffectiveReviewItems(dictID: string, now = Math.floor(D
     dictionaryScoped ? Promise.resolve<ReviewAdjustment[]>([]) : validatedAdjustments(),
     db.wordFeedback.toArray(),
   ])
-  return applyAdjustments(excludeBlacklistedStates(states, feedback), adjustments, now)
+  return filterAvailableReviewItems(applyAdjustments(excludeBlacklistedStates(states, feedback), adjustments, now))
 }
 
-function hasAvailableSource(state: ISpacedReviewState) {
-  return orderedReviewSources(state).some((dictID) => Boolean(idDictionaryMap[dictID]))
-}
-
-async function getAllEffectiveReviewItems(now = Math.floor(Date.now() / 1000)) {
+export async function getAllReviewSnapshot(now = Math.floor(Date.now() / 1000)) {
   const [states, adjustments, feedback] = await Promise.all([
     spacedReviewDb.wordStates.toArray(),
     validatedAdjustments(),
     db.wordFeedback.toArray(),
   ])
-  return applyAdjustments(excludeBlacklistedStates(states.filter((state) => !isDictionaryScopedReview(state.preferredSourceDict)), feedback), adjustments, now)
+  const items = await filterAvailableReviewItems(applyAdjustments(excludeBlacklistedStates(states.filter((state) => !isDictionaryScopedReview(state.preferredSourceDict)), feedback), adjustments, now))
+  return { states, feedback, items }
+}
+
+export async function getAllEffectiveReviewItems(now = Math.floor(Date.now() / 1000)) {
+  return (await getAllReviewSnapshot(now)).items
+}
+
+export async function getTodayReviewProgress(now = new Date()) {
+  const start = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime() / 1000
+  const end = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1).getTime() / 1000
+  const nowSeconds = Math.floor(now.getTime() / 1000)
+  const [{ states, feedback, items }, records] = await Promise.all([
+    getAllReviewSnapshot(nowSeconds),
+    db.wordRecords.where('timeStamp').between(start, end, true, false).toArray(),
+  ])
+  const reviewedKeys = new Set(records.filter(record => !record.spacedReviewPending &&
+    record.spelling?.outcome === 'completed' && record.spelling.kind === 'main' && record.spacedReviewDecision?.isDue === true)
+    .map(record => serializedWordLearningKey(spacedReviewIdentity(record.dict, record.word))))
+  const reviewedStates = excludeBlacklistedStates(states.filter(state => !state.scope.startsWith('dictionary:') &&
+    reviewedKeys.has(serializedWordLearningKey(state))), feedback)
+  const availability = await reviewAvailability(reviewedStates)
+  const completedKeys = new Set(reviewedStates.filter((_, index) => !availability[index].missing).map(serializedWordLearningKey))
+  const dueKeys = new Set(items.filter(item => item.effectiveDueAt <= nowSeconds).map(item => serializedWordLearningKey(item.state)))
+  const total = new Set([...Array.from(completedKeys), ...Array.from(dueKeys)]).size
+  const completed = Array.from(completedKeys).filter(key => !dueKeys.has(key)).length
+  const nextDue = items.filter(item => item.effectiveDueAt > nowSeconds).map(item => item.effectiveDueAt * 1000)
+  return { completed, total, pending: dueKeys.size, percentage: total === 0 ? 0 : completed / total * 100,
+    nextRefreshAt: Math.min(end * 1000, ...nextDue) }
 }
 
 export async function getSpacedReviewSummary(dictID: string) {
@@ -144,12 +169,24 @@ export async function getSpacedReviewSummary(dictID: string) {
 export async function getAllSpacedReviewSummary() {
   const now = Math.floor(Date.now() / 1000)
   const items = await getAllEffectiveReviewItems(now)
-  const dueItems = items.filter((item) => item.effectiveDueAt <= now && hasAvailableSource(item.state))
-  const nextItem = items.find((item) => item.effectiveDueAt > now && hasAvailableSource(item.state))
+  return summarizeAllSpacedReviewItems(items, now).summary
+}
+
+export function summarizeAllSpacedReviewItems(items: EffectiveReviewItem[], now: number) {
+  const dueItems = items.filter((item) => item.effectiveDueAt <= now)
+  const nextItem = items.find((item) => item.effectiveDueAt > now)
+  const soon = items.filter((item) => item.effectiveDueAt > now && item.effectiveDueAt <= now + IMMEDIATE_DUE_WINDOW_SECONDS)
   return {
-    dueCount: dueItems.length,
-    gptAdjustedCount: items.filter(wasGptAdjusted).length,
-    nextReviewAt: nextItem?.effectiveDueAt,
+    summary: {
+      dueCount: dueItems.length,
+      gptAdjustedCount: items.filter(wasGptAdjusted).length,
+      nextReviewAt: nextItem?.effectiveDueAt,
+    },
+    soonDue: {
+      count: soon.length,
+      nextReviewAt: soon.reduce<number | undefined>((earliest, item) =>
+        earliest === undefined ? item.effectiveDueAt : Math.min(earliest, item.effectiveDueAt), undefined),
+    },
   }
 }
 
@@ -161,7 +198,7 @@ async function soonDueItems(windowSeconds: number) {
   const items = await getAllEffectiveReviewItems(now)
   return {
     now,
-    items: items.filter((item) => item.effectiveDueAt > now && item.effectiveDueAt <= now + windowSeconds && hasAvailableSource(item.state)),
+    items: items.filter((item) => item.effectiveDueAt > now && item.effectiveDueAt <= now + windowSeconds),
   }
 }
 
@@ -180,8 +217,9 @@ export async function getSoonDueReviewSummary(windowSeconds = IMMEDIATE_DUE_WIND
 export async function generateSoonDueSpacedReviewRecord(
   windowSeconds = IMMEDIATE_DUE_WINDOW_SECONDS,
 ): Promise<ReviewRecord | undefined> {
+  dictionaryWordCache.invalidateCloud()
   const { items } = await soonDueItems(windowSeconds)
-  const words = await resolveReviewWords(items.slice(0, MAX_REVIEW_WORDS_PER_SESSION))
+  const words = (await resolveReviewWords(items)).slice(0, MAX_REVIEW_WORDS_PER_SESSION)
   if (words.length === 0) return undefined
 
   const record = new ReviewRecord(ALL_SPACED_REVIEW_DICT_ID, words, 'spaced')
@@ -191,11 +229,11 @@ export async function generateSoonDueSpacedReviewRecord(
 
 export async function generateSpacedReviewRecord(dictID: string): Promise<ReviewRecord | undefined> {
   if (!idDictionaryMap[dictID]) return undefined
+  dictionaryWordCache.invalidateCloud()
   const now = Math.floor(Date.now() / 1000)
   const dueItems = (await getEffectiveReviewItems(dictID, now))
     .filter((item) => item.effectiveDueAt <= now)
-    .slice(0, MAX_REVIEW_WORDS_PER_SESSION)
-  const dueWords = await resolveReviewWords(dueItems, dictID)
+  const dueWords = (await resolveReviewWords(dueItems, dictID)).slice(0, MAX_REVIEW_WORDS_PER_SESSION)
   if (dueWords.length === 0) return undefined
 
   const record = new ReviewRecord(dictID, dueWords, 'spaced')
@@ -204,13 +242,13 @@ export async function generateSpacedReviewRecord(dictID: string): Promise<Review
 }
 
 export async function generateAllSpacedReviewRecord(): Promise<ReviewRecord | undefined> {
+  dictionaryWordCache.invalidateCloud()
   const now = Math.floor(Date.now() / 1000)
   const dueItems = (await getAllEffectiveReviewItems(now))
-    .filter((item) => item.effectiveDueAt <= now && hasAvailableSource(item.state))
-    .slice(0, MAX_REVIEW_WORDS_PER_SESSION)
+    .filter((item) => item.effectiveDueAt <= now)
   if (dueItems.length === 0) return undefined
 
-  const words = await resolveReviewWords(dueItems)
+  const words = (await resolveReviewWords(dueItems)).slice(0, MAX_REVIEW_WORDS_PER_SESSION)
   if (words.length === 0) return undefined
 
   const record = new ReviewRecord(ALL_SPACED_REVIEW_DICT_ID, words, 'spaced')
@@ -218,33 +256,53 @@ export async function generateAllSpacedReviewRecord(): Promise<ReviewRecord | un
   return record
 }
 
-async function resolveReviewWords(items: EffectiveReviewItem[], requestedDict?: string): Promise<ReviewWord[]> {
-  const candidates = items.map((item) => orderedReviewSources(item.state, requestedDict).filter((dictID) => idDictionaryMap[dictID]))
-  const dictionaryIds = Array.from(new Set(candidates.flat()))
-  const dictionaryWordMaps = await Promise.all(
-    dictionaryIds.map(async (dictID) => {
-      try {
-        const words = await wordListFetcher(idDictionaryMap[dictID].url)
-        return [dictID, new Map(words.map((word) => [spacedReviewIdentity(dictID, word.name).normalizedWord, word]))] as const
-      } catch (error) {
-        console.error(`Failed to load review source dictionary ${dictID}`, error)
-        return [dictID, undefined] as const
-      }
-    }),
-  )
-  const wordMaps = new Map(dictionaryWordMaps)
+function reviewSourceCandidates(state: Pick<ISpacedReviewState, 'scope' | 'word' | 'sourceDicts' | 'preferredSourceDict'>, requestedDict?: string) {
+  const available = Object.keys(idDictionaryMap).filter(dictID => spacedReviewIdentity(dictID, state.word).scope === state.scope)
+  return Array.from(new Set([...orderedReviewSources(state as ISpacedReviewState, requestedDict), ...available]))
+    .filter(dictID => available.includes(dictID))
+}
 
-  return items
-    .map((item, index): ReviewWord | undefined => {
-      const sourceDict = candidates[index].find((dictID) => wordMaps.get(dictID)?.has(item.state.normalizedWord))
-      const word = sourceDict ? wordMaps.get(sourceDict)?.get(item.state.normalizedWord) : undefined
-      if (!sourceDict || !word) {
-        console.error(`No available source contains review word ${item.state.scope}:${item.state.normalizedWord}`)
-        return undefined
-      }
-      return { ...word, sourceDict }
-    })
-    .filter((word): word is ReviewWord => word !== undefined)
+async function readReviewWordMaps(dictionaryIds: string[]) {
+  return new Map(await Promise.all(dictionaryIds.map(async dictID => {
+    try {
+      const words = await dictionaryWordCache.read(idDictionaryMap[dictID].url)
+      return [dictID, new Map(words.map(word => [spacedReviewIdentity(dictID, word.name).normalizedWord, word]))] as const
+    } catch (error) {
+      console.error(`Failed to load review source dictionary ${dictID}`, error)
+      return [dictID, undefined] as const
+    }
+  })))
+}
+
+async function reviewAvailability(states: Pick<ISpacedReviewState, 'scope' | 'word' | 'normalizedWord' | 'sourceDicts' | 'preferredSourceDict'>[], requestedDict?: string) {
+  const candidates = states.map(state => reviewSourceCandidates(state, requestedDict))
+  const maps = await readReviewWordMaps(Array.from(new Set(candidates.flat())))
+  return states.map((state, index) => {
+    const sourceDict = candidates[index].find(dictID => maps.get(dictID)?.has(state.normalizedWord))
+    const word = sourceDict ? maps.get(sourceDict)?.get(state.normalizedWord) : undefined
+    return { sourceDict, word, missing: !word && candidates[index].every(dictID => maps.get(dictID) !== undefined) }
+  })
+}
+
+async function filterAvailableReviewItems(items: EffectiveReviewItem[]) {
+  const availability = await reviewAvailability(items.map(item => item.state))
+  return items.filter((_, index) => !availability[index].missing)
+}
+
+// Saved queues retain their history and indices; the typing reducer skips these exposures.
+export async function listMissingReviewWordKeys(words: ReviewWord[], fallbackDict: string) {
+  dictionaryWordCache.invalidateCloud()
+  const states = words.map(word => {
+    const dictID = word.sourceDict ?? fallbackDict
+    return { ...spacedReviewIdentity(dictID, word.name), word: word.name, preferredSourceDict: dictID, sourceDicts: [dictID] }
+  })
+  const availability = await reviewAvailability(states)
+  return states.flatMap((state, index) => availability[index].missing ? [serializedWordLearningKey(state)] : [])
+}
+
+async function resolveReviewWords(items: EffectiveReviewItem[], requestedDict?: string): Promise<ReviewWord[]> {
+  const availability = await reviewAvailability(items.map(item => item.state), requestedDict)
+  return availability.flatMap(({ word, sourceDict }) => word && sourceDict ? [{ ...word, sourceDict }] : [])
 }
 
 export async function rebuildSpacedReviewScheduleFromHistory(syncCloud = true) {
@@ -297,14 +355,27 @@ export async function updateLastSpacedReviewRating(recordId: number, rating: 'ha
     if (!record || !record.spacedReviewDecision || record.spacedReviewDecision.algorithm !== SPACED_REVIEW_ALGORITHM)
       return false
     const decision = record.spacedReviewDecision
-    if (!['new', 'independent-due'].includes(decision.reason) || decision.rating === 'again' || !decision.fsrsCardBefore)
-      return false
+    if (!canManuallyRateSpelling(record)) return false
     const identity = spacedReviewIdentity(record.dict, record.word)
     const key = wordLearningStateKey(identity)
     const current = await spacedReviewDb.wordStates.get(key)
-    if (!current?.fsrsCard || current.lastRecordId !== recordId) return false
+    if (!current || current.lastRecordId !== recordId) return false
+    const reschedules = decision.evidence === 'independent' && ['new', 'independent-due'].includes(decision.reason) &&
+      decision.rating !== 'again' && Boolean(decision.fsrsCardBefore)
+    if (!reschedules) {
+      const revisedDecision = { ...decision, practiceRating: rating }
+      await db.wordRecords.update(recordId, { spacedReviewDecision: revisedDecision })
+      try {
+        await appendCloudStudyEvent('rating-correction', { recordId, word: record.word, dict: record.dict,
+          previousRating: decision.practiceRating ?? decision.rating, rating, spacedReviewDecision: revisedDecision })
+      } catch (error) {
+        console.error('Could not queue rating correction event', error)
+      }
+      return true
+    }
+    if (!decision.fsrsCardBefore || !current.fsrsCard) return false
     const atMs = record.spelling?.completedAtMs ?? record.timeStamp * 1000
-    const card = nextFsrsCard(decision.fsrsCardBefore, atMs, rating)
+    const card = nextFsrsCard(decision.fsrsCardBefore, atMs, rating, weightsForDecision(decision).weights)
     const intervalMinutes = Math.max(0, (card.dueMs - atMs) / 60000)
     const stage = EBBINGHAUS_INTERVAL_MINUTES.reduce((band, minimum, index) => intervalMinutes >= minimum ? index : band, 0)
     const revisedDecision = { ...decision, rating, ratingSource: 'manual' as const,
@@ -407,7 +478,9 @@ export async function syncAlgorithmReviewPlan() {
 
 async function writeCurrentAlgorithmReviewPlan() {
   const [states, feedback] = await Promise.all([spacedReviewDb.wordStates.toArray(), db.wordFeedback.toArray()])
-  const globalStates = states.filter((state) => !isDictionaryScopedReview(state.preferredSourceDict))
+  const globalCandidates = states.filter((state) => !isDictionaryScopedReview(state.preferredSourceDict))
+  const availability = await reviewAvailability(globalCandidates)
+  const globalStates = globalCandidates.filter((_, index) => !availability[index].missing)
   const now = Math.floor(Date.now() / 1000)
   const orderedFeedback = feedback.sort(
     (left, right) => left.scope.localeCompare(right.scope) || left.normalizedWord.localeCompare(right.normalizedWord),
@@ -453,6 +526,26 @@ async function writeCurrentAlgorithmReviewPlan() {
           sourceDictionaryIds: item.sourceDicts,
           count: item.notHelpfulCount,
           lastMarkedAt: item.lastNotHelpfulAt,
+          updatedAt: item.updatedAt,
+        })),
+      writingUseHelp: orderedFeedback
+        .filter((item) => item.needsWritingExample === true)
+        .map((item) => ({
+          scope: item.scope,
+          normalizedWord: item.normalizedWord,
+          word: item.word,
+          sourceDictionaryIds: item.sourceDicts,
+          lastMarkedAt: item.lastWritingUseMarkedAt,
+          updatedAt: item.updatedAt,
+        })),
+      helpful: orderedFeedback
+        .filter((item) => item.helpful === true)
+        .map((item) => ({
+          scope: item.scope,
+          normalizedWord: item.normalizedWord,
+          word: item.word,
+          sourceDictionaryIds: item.sourceDicts,
+          lastMarkedAt: item.lastHelpfulMarkedAt,
           updatedAt: item.updatedAt,
         })),
     },

@@ -5,10 +5,11 @@ import { isChineseSymbol, isLegal } from '@/utils'
 import { useAtomValue } from 'jotai'
 import { useCallback, useContext, useEffect } from 'react'
 
-export default function KeyEventHandler({ updateInput }: { updateInput: (updateObj: WordUpdateAction) => void }) {
+export default function KeyEventHandler({ updateInput, wholeWordSubmit }: { updateInput: (updateObj: WordUpdateAction) => void; wholeWordSubmit?: boolean }) {
   // eslint-disable-next-line  @typescript-eslint/no-non-null-assertion
   const { state } = useContext(TypingContext)!
-  const isWholeWordSubmit = useAtomValue(isWholeWordSubmitAtom)
+  const savedWholeWordSubmit = useAtomValue(isWholeWordSubmitAtom)
+  const isWholeWordSubmit = wholeWordSubmit ?? savedWholeWordSubmit
 
   const onKeydown = useCallback(
     (e: KeyboardEvent) => {

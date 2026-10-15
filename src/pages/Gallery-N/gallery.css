@@ -1,0 +1,191 @@
+.gallery-home {
+  background: #f7f5f0;
+  color: #302e2b;
+  scrollbar-gutter: stable;
+}
+.gallery-eyebrow {
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  color: #8b8175;
+  font-weight: 600;
+}
+.gallery-back {
+  border-color: #ded9d0;
+  background: #fffdf9;
+  transition: background 0.15s;
+}
+.gallery-back:hover {
+  background: #ede8df;
+}
+.gallery-library,
+.gallery-home [data-testid='gallery-learning-dashboard'],
+.gallery-home [data-testid='gpt-training-card'] {
+  background: #fffdf9;
+  border-color: #e4dfd6;
+  box-shadow: none;
+}
+.gallery-home [data-testid='gallery-learning-dashboard'] {
+  border-radius: 20px;
+}
+.gallery-home [data-testid='gallery-learning-dashboard'] > div > div:first-child {
+  background: #f0ece4;
+  color: #302e2b;
+  border-bottom: 1px solid #e4dfd6;
+  padding: 24px;
+}
+.gallery-home [data-testid='gallery-learning-dashboard'] > div > div:first-child p,
+.gallery-home [data-testid='gallery-learning-dashboard'] > div > div:first-child span {
+  color: #786b5e;
+}
+.gallery-home [data-testid='gallery-learning-dashboard'] > div > div:last-child {
+  padding: 22px 24px;
+}
+.gallery-home [data-testid='gallery-learning-dashboard'] h3 {
+  font-size: 15px;
+}
+.gallery-home [data-testid='dictionary-card'] {
+  border: 1px solid #e4dfd6;
+  background: #fffdf9;
+  box-shadow: none;
+  border-radius: 12px;
+  transition: border-color 0.15s, background 0.15s;
+  min-height: 148px;
+}
+.gallery-home [data-testid='dictionary-card']:hover {
+  border-color: #bd917b;
+  background: #f9f5ed;
+}
+.gallery-home [data-testid='dictionary-card'][data-selected='true'] {
+  background: #f5e8de;
+  border-color: #bd917b;
+}
+.gallery-home [data-testid='dictionary-card'] h1 {
+  font-size: 16px;
+  line-height: 1.5;
+  min-height: 48px;
+  font-weight: 600;
+}
+.gallery-home [data-testid='dictionary-card'] p {
+  font-size: 12px;
+}
+.gallery-home [data-testid='dictionary-card'] img {
+  width: 42px;
+  opacity: 0.16;
+}
+.gallery-home [class*='text-indigo-'] {
+  color: #a76348;
+}
+.gallery-home [class*='text-white'] {
+  color: #302e2b;
+}
+.gallery-home [data-testid='dictionary-card'] h1 {
+  color: #302e2b;
+}
+.gallery-home [data-testid='gpt-training-card'] {
+  border-radius: 16px;
+  margin-bottom: 0;
+}
+.gallery-home [data-testid='gpt-training-card'] h2 {
+  font-size: 17px;
+  color: #302e2b;
+}
+.gallery-home .my-btn-primary {
+  background: #a76348;
+  color: #fffdf9;
+  box-shadow: none;
+}
+.gallery-home .my-btn-primary:hover {
+  background: #90533d;
+}
+.gallery-home .my-btn-secondary {
+  background: #f0ece4;
+  color: #645b50;
+  box-shadow: none;
+}
+.gallery-home [data-testid='daily-clean-rate'] {
+  border-color: #e4dfd6;
+}
+.gallery-home [data-testid='daily-clean-rate'] .bg-pink-400 {
+  background: #bf8d78;
+}
+.gallery-home [data-testid='tomorrow-review-forecast'] > div {
+  background: #f7f4ee;
+  border-color: #e4dfd6;
+}
+.gallery-home [data-testid='tomorrow-review-forecast'] p {
+  color: #786b5e;
+}
+.gallery-home [data-testid='tomorrow-review-forecast'] p:nth-child(2) {
+  color: #302e2b;
+}
+.dark .gallery-home {
+  background: #232321;
+  color: #e6e2da;
+}
+.dark .gallery-library,
+.dark .gallery-home [data-testid='gallery-learning-dashboard'],
+.dark .gallery-home [data-testid='gpt-training-card'],
+.dark .gallery-back {
+  background: #2c2c29;
+  border-color: #41413c;
+}
+.dark .gallery-home [data-testid='gallery-learning-dashboard'] > div > div:first-child {
+  background: #33322d;
+  color: #e6e2da;
+  border-color: #41413c;
+}
+.dark .gallery-home [data-testid='gallery-learning-dashboard'] > div > div:first-child p,
+.dark .gallery-home [data-testid='gallery-learning-dashboard'] > div > div:first-child span {
+  color: #bcb3a5;
+}
+.dark .gallery-home [data-testid='dictionary-card'] {
+  background: #2c2c29;
+  border-color: #41413c;
+}
+.dark .gallery-home [data-testid='dictionary-card']:hover,
+.dark .gallery-home [data-testid='dictionary-card'][data-selected='true'] {
+  background: #43362f;
+  border-color: #ab7b62;
+}
+.dark .gallery-home [class*='text-white'],
+.dark .gallery-home [data-testid='gpt-training-card'] h2 {
+  color: #e6e2da;
+}
+.dark .gallery-home [class*='text-indigo-'] {
+  color: #d6a28a;
+}
+.dark .gallery-home [data-testid='dictionary-card'] h1 {
+  color: #e6e2da;
+}
+.dark .gallery-home [data-testid='tomorrow-review-forecast'] > div {
+  background: #33322d;
+  border-color: #41413c;
+}
+.dark .gallery-home [data-testid='tomorrow-review-forecast'] p {
+  color: #bcb3a5;
+}
+.dark .gallery-home [data-testid='tomorrow-review-forecast'] p:nth-child(2) {
+  color: #e6e2da;
+}
+.gallery-home :focus-visible {
+  outline: 2px solid #a76348;
+  outline-offset: 3px;
+}
+.gallery-dashboard-content {
+  display: flex;
+  flex-direction: column;
+}
+.gallery-dashboard-content > [data-testid='practice-activity'] {
+  order: 1;
+  margin-top: 22px;
+  border-top: 1px solid #e4dfd6;
+  padding-top: 18px;
+}
+.gallery-dashboard-content > [data-testid='daily-clean-rate'] {
+  order: 2;
+  margin-top: 18px;
+  padding-top: 18px;
+}
+.dark .gallery-dashboard-content > [data-testid='practice-activity'] {
+  border-color: #41413c;
+}

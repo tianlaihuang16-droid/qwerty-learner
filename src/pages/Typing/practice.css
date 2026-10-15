@@ -1,0 +1,194 @@
+.practice-page {
+  min-height: 100vh;
+  background: #f7f5f0;
+  color: #302e2b;
+}
+.practice-page > main {
+  height: auto;
+  min-height: 100vh;
+  padding-bottom: 24px;
+}
+.practice-page header {
+  max-width: 1560px;
+  padding: 24px 32px 16px;
+}
+.practice-page header > div {
+  gap: 20px;
+}
+.practice-page header > div > a {
+  font-size: 18px;
+  font-weight: 600;
+  color: #645b50;
+  white-space: nowrap;
+}
+.practice-page header > div > a img {
+  width: 32px;
+  height: 32px;
+  margin-right: 10px;
+}
+.practice-page header nav {
+  flex-wrap: wrap;
+  gap: 10px;
+  max-width: 100%;
+  padding: 14px 18px;
+  border: 1px solid #e4dfd6;
+  border-radius: 16px;
+  background: #fffdf9;
+  box-shadow: none;
+}
+.practice-page header nav > * {
+  margin-left: 0;
+}
+.practice-page header nav [class*='text-indigo-'] {
+  color: #a76348;
+}
+.practice-page header nav [data-testid='word-feedback-controls'] > div:first-child {
+  flex-wrap: wrap;
+}
+.practice-page header nav [data-testid='word-feedback-controls'] button {
+  min-height: 32px;
+}
+.practice-body {
+  max-width: 1480px;
+  padding: 0 32px;
+  min-height: calc(100vh - 130px);
+}
+.practice-workspace {
+  flex: 1;
+}
+.practice-stage {
+  min-height: 430px;
+}
+.practice-page [data-testid='spelling-status'] {
+  color: #8b8175;
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  margin-bottom: 24px;
+}
+.practice-page [data-testid='chapter-audio'],
+.practice-page [data-testid='learned-skip-count'] {
+  color: #8b8175;
+  font-size: 12px;
+}
+.practice-page .my-btn-primary {
+  background: #a76348;
+  color: #fffdf9;
+  box-shadow: none;
+  border-radius: 8px;
+}
+.practice-page .my-btn-primary:hover {
+  background: #90533d;
+}
+.practice-page .my-btn-primary[aria-label='暂停'] {
+  background: #786b5e;
+}
+.practice-page .my-btn-secondary {
+  background: #ede8df;
+  color: #645b50;
+  box-shadow: none;
+}
+.practice-page header nav [class*='shadow'] {
+  box-shadow: none;
+}
+.practice-page .practice-word-navigation { height: auto; min-height: 170px; position: relative; z-index: 1; }
+.practice-page [data-testid='typing-speed'] {
+  width: 100%;
+  margin-top: 16px;
+  border: 1px solid #e4dfd6;
+  border-radius: 16px;
+  background: #fffdf9;
+  padding: 24px 18px;
+  box-shadow: none;
+}
+.practice-page [data-testid='typing-speed'] .border-b {
+  border-color: #e4dfd6;
+}
+.practice-page [data-testid='typing-speed'] .text-gray-600 {
+  color: #645b50;
+}
+.practice-page [data-testid='typing-speed'] .stroke-indigo-500 {
+  stroke: #a76348;
+}
+.practice-page [data-testid='typing-speed'] .stroke-gray-200 {
+  stroke: #ded6c9;
+}
+.practice-page .practice-rating button {
+  border-radius: 8px;
+}
+.practice-page .practice-rating button[aria-pressed='true'] {
+  border-color: #bd917b;
+  background: #f5e8de;
+  color: #90533d;
+}
+.practice-page :focus-visible {
+  outline: 2px solid #a76348;
+  outline-offset: 3px;
+}
+.dark .practice-page {
+  background: #232321;
+  color: #e6e2da;
+}
+.dark .practice-page header > div > a {
+  color: #d6c8b8;
+}
+.dark .practice-page header nav,
+.dark .practice-page [data-testid='typing-speed'] {
+  background: #2c2c29;
+  border-color: #41413c;
+}
+.dark .practice-page header nav [class*='text-indigo-'] {
+  color: #d6a28a;
+}
+.dark .practice-page [data-testid='spelling-status'],
+.dark .practice-page [data-testid='chapter-audio'],
+.dark .practice-page [data-testid='learned-skip-count'] {
+  color: #bcb3a5;
+}
+.dark .practice-page [data-testid='typing-speed'] .border-b {
+  border-color: #41413c;
+}
+.dark .practice-page [data-testid='typing-speed'] .text-gray-600 {
+  color: #d6c8b8;
+}
+.dark .practice-page [data-testid='typing-speed'] .stroke-gray-200 {
+  stroke: #41413c;
+}
+.dark .practice-page .my-btn-secondary {
+  background: #33322d;
+  color: #d6c8b8;
+}
+.dark .practice-page .practice-rating button[aria-pressed='true'] {
+  background: #43362f;
+  color: #e0b59e;
+  border-color: #ab7b62;
+}
+@media (max-width: 1023px) {
+  .practice-page header {
+    padding: 20px 24px 12px;
+  }
+  .practice-page header > div {
+    align-items: stretch;
+  }
+  .practice-page header nav {
+    justify-content: center;
+    width: 100%;
+  }
+  .practice-body {
+    padding: 0 24px;
+    min-height: 700px;
+  }
+}
+
+.practice-page .practice-progress {
+  width: min(380px, 60%);
+}
+.practice-page .practice-progress > div {
+  height: 5px;
+  background: #e4dfd6;
+}
+.practice-page .practice-progress > div > div {
+  background: #bd917b;
+}
+.dark .practice-page .practice-progress > div {
+  background: #41413c;
+}

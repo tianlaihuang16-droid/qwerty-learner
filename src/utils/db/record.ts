@@ -191,7 +191,10 @@ export interface ISpacedReviewDecision {
   algorithm: string
   rating?: SpacedReviewRating
   ratingSource?: SpacedReviewRatingSource
+  /** Difficulty feedback for an exposure that did not qualify for rescheduling. */
+  practiceRating?: 'easy' | 'hard'
   schedulerParamsVersion?: string
+  schedulerWeights?: number[]
   fsrsCardBefore?: FsrsCardSnapshot | null
   evidence: SpacedReviewEvidence
   dueAtStart: SpacedReviewDueAtStart

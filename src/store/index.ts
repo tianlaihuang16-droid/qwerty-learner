@@ -16,6 +16,7 @@ import { atom } from 'jotai'
 import { atomWithStorage } from 'jotai/utils'
 
 export const currentDictIdAtom = atomWithStorage('currentDict', DEFAULT_DICTIONARY_ID)
+export const lastLearningDictIdAtom = atomWithStorage('lastLearningDict', '')
 export const currentDictInfoAtom = atom<Dictionary>((get) => {
   const id = get(currentDictIdAtom)
   let dict = idDictionaryMap[id]

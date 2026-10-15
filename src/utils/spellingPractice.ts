@@ -122,13 +122,13 @@ export class SpellingRecorder {
     attempt.durationMs = attempt.keys.at(-1)?.activeAtMs ?? 0
     if (!attempt.keys.length) attempt.firstKeyDelayMs = null
   }
-  finishDraft(correct: boolean, expected: string, mismatchIndex: number) {
+  finishDraft(correct: boolean, expected: string, mismatchIndex: number, firstError?: { position: number; expected: string; actual: string }) {
     const attempt = this.trace.activeAttempt
     const time = Math.round(this.now() - this.attemptStart)
     attempt.durationMs = time
     attempt.outcome = correct ? 'correct' : 'error'
     if (!correct) {
-      attempt.error = {
+      attempt.error = firstError ?? {
         position: mismatchIndex,
         expected: expected[mismatchIndex] ?? '',
         actual: attempt.input[mismatchIndex] ?? '',

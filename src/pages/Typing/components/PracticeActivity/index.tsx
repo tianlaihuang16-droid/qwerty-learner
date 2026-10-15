@@ -35,22 +35,22 @@ export default function PracticeActivity() {
 
   return (
     <section
-      className="my-card mt-4 flex w-4/5 max-w-5xl flex-col rounded-xl bg-white px-5 py-4 transition-colors duration-300 dark:bg-gray-800"
+      className="flex w-full min-w-0 flex-col"
       data-testid="practice-activity"
       aria-labelledby="practice-activity-title"
     >
-      <div className="mb-3 flex items-center justify-between gap-6">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 id="practice-activity-title" className="text-base font-semibold text-gray-700 dark:text-gray-100">
             练习记录
           </h2>
           <p className="mt-1 text-xs text-gray-400">过去 12 个月 · 每完成一个单词记 1 次</p>
         </div>
-        <dl className="flex shrink-0 gap-6 text-right">
+        <dl className="flex shrink-0 gap-4 text-right sm:gap-6">
           {summaryItems.map((item) => (
             <div key={item.label}>
               <dt className="text-xs text-gray-400">{item.label}</dt>
-              <dd className="text-lg font-semibold text-indigo-500" data-testid={item.testId}>
+              <dd className="text-base font-semibold text-indigo-500" data-testid={item.testId}>
                 {item.value}
               </dd>
             </div>
@@ -60,8 +60,8 @@ export default function PracticeActivity() {
       <div className="overflow-x-auto pb-1">
         <ActivityCalendar
           data={activity.data}
-          blockSize={11}
-          blockMargin={3}
+          blockSize={9}
+          blockMargin={2}
           blockRadius={3}
           fontSize={12}
           colorScheme={isOpenDarkMode ? 'dark' : 'light'}

@@ -1,49 +1,61 @@
 import type { WordWithIndex } from '@/typings'
-import { getWordFeedback, markWordNotHelpful, setWordBlacklisted } from '@/utils/db/word-feedback-service'
+import { getWordFeedback, setWordBlacklisted, setWordHelpful, setWordNeedsWritingExample } from '@/utils/db/word-feedback-service'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 
 type Props = {
   word: WordWithIndex
   sourceDict: string
-  onBlacklisted: () => void
+  onSkip: () => void
 }
 
-export default function WordFeedbackControls({ word, sourceDict, onBlacklisted }: Props) {
-  const [busy, setBusy] = useState<'blacklist' | 'not-helpful'>()
+export default function WordFeedbackControls({ word, sourceDict, onSkip }: Props) {
+  const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const feedback = useLiveQuery(() => (sourceDict ? getWordFeedback(sourceDict, word.name) : undefined), [sourceDict, word.name])
-  const notHelpfulLabel = useMemo(
-    () => (feedback?.notHelpfulCount ? `已记录没有帮助 ${feedback.notHelpfulCount} 次` : '没有帮助'),
-    [feedback?.notHelpfulCount],
-  )
-
-  const markNotHelpful = async () => {
-    if (busy) return
-    setBusy('not-helpful')
-    setError('')
-    try {
-      await markWordNotHelpful(sourceDict, word.name)
-    } catch (reason) {
-      console.error('Failed to mark word as not helpful', reason)
-      setError('反馈保存失败，请重试')
-    } finally {
-      setBusy(undefined)
-    }
-  }
 
   const blacklist = async () => {
     if (busy || feedback?.blacklisted) return
-    setBusy('blacklist')
+    setBusy(true)
     setError('')
     try {
       await setWordBlacklisted(sourceDict, word.name, true)
-      onBlacklisted()
+      onSkip()
     } catch (reason) {
       console.error('Failed to blacklist word', reason)
       setError('拉黑保存失败，当前词未跳过')
     } finally {
-      setBusy(undefined)
+      setBusy(false)
+    }
+  }
+
+  const toggleWritingUse = async () => {
+    if (busy) return
+    setBusy(true)
+    setError('')
+    try {
+      const marked = feedback?.needsWritingExample !== true
+      await setWordNeedsWritingExample(sourceDict, word.name, marked)
+      if (marked) onSkip()
+    } catch (reason) {
+      console.error('Failed to save writing-use feedback', reason)
+      setError('写作使用反馈保存失败，请重试')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const toggleHelpful = async () => {
+    if (busy) return
+    setBusy(true)
+    setError('')
+    try {
+      await setWordHelpful(sourceDict, word.name, feedback?.helpful !== true)
+    } catch (reason) {
+      console.error('Failed to save helpful feedback', reason)
+      setError('帮助反馈保存失败，请重试')
+    } finally {
+      setBusy(false)
     }
   }
 
@@ -52,21 +64,44 @@ export default function WordFeedbackControls({ word, sourceDict, onBlacklisted }
       <div className="flex items-center gap-2">
         <button
           type="button"
-          className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs text-gray-600 transition hover:border-indigo-400 hover:text-indigo-600 disabled:cursor-wait disabled:opacity-60 dark:border-gray-600 dark:text-gray-300"
-          disabled={Boolean(busy)}
-          onClick={() => void markNotHelpful()}
-          aria-label={notHelpfulLabel}
+          disabled={busy}
+          onClick={() => void toggleHelpful()}
+          aria-label={feedback?.helpful ? '已标记很有帮助，点击取消' : '很有帮助'}
+          aria-pressed={feedback?.helpful === true}
+          title={feedback?.helpful ? '已标记很有帮助，点击取消' : '这个词很有帮助；标记后取消写作不会用'}
+          className={`rounded-lg border px-2.5 py-1.5 text-xs transition disabled:cursor-wait disabled:opacity-60 ${
+            feedback?.helpful
+              ? 'border-emerald-400 bg-emerald-50 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-200'
+              : 'border-gray-200 text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800'
+          }`}
         >
-          {busy === 'not-helpful' ? '正在记录…' : notHelpfulLabel}
+          👍 很有帮助
+        </button>
+        <button
+          type="button"
+          className={`rounded-lg border px-2.5 py-1.5 text-xs transition disabled:cursor-wait disabled:opacity-60 ${
+            feedback?.needsWritingExample
+              ? 'border-amber-400 bg-amber-50 text-amber-800 dark:bg-amber-900/30 dark:text-amber-200'
+              : 'border-gray-200 text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800'
+          }`}
+          disabled={busy}
+          onClick={() => void toggleWritingUse()}
+          aria-label={feedback?.needsWritingExample ? '已标记写作不会用，点击取消' : '想不到写作中怎么用这个词'}
+          aria-pressed={feedback?.needsWritingExample === true}
+          title={
+            feedback?.needsWritingExample ? '已标记：想不到写作中怎么用，点击取消' : '标记写作不会用并跳过当前词；取消很有帮助，不拉黑'
+          }
+        >
+          {feedback?.needsWritingExample ? '❓ 写作不会用' : '❓ 写作不会用并跳过'}
         </button>
         <button
           type="button"
           className="rounded-lg border border-red-200 px-3 py-1.5 text-xs text-red-600 transition hover:bg-red-50 disabled:cursor-wait disabled:opacity-60 dark:border-red-900 dark:hover:bg-red-950/30"
-          disabled={Boolean(busy) || feedback?.blacklisted}
+          disabled={busy || feedback?.blacklisted}
           onClick={() => void blacklist()}
           aria-label={feedback?.blacklisted ? '已拉黑' : '拉黑并跳过'}
         >
-          {busy === 'blacklist' ? '正在拉黑…' : feedback?.blacklisted ? '已拉黑' : '拉黑并跳过'}
+          {busy ? '正在拉黑…' : feedback?.blacklisted ? '已拉黑' : '拉黑并跳过'}
         </button>
       </div>
       {error && (

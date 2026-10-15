@@ -1,4 +1,5 @@
 import type { Word } from '@/typings'
+import { createGalleryWordCache } from './galleryWordCache'
 import { readLocalDictionary } from './localDictionaries'
 import { invoke } from '@tauri-apps/api/tauri'
 
@@ -13,3 +14,5 @@ export async function wordListFetcher(url: string): Promise<Word[]> {
   const words: Word[] = await response.json()
   return words
 }
+
+export const dictionaryWordCache = createGalleryWordCache(wordListFetcher)

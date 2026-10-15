@@ -14,6 +14,8 @@ export type WordState = {
   wrongCount: number
   // 当前单词最近一次实际输入的错误字符；空字符串表示漏输入
   lastWrongInput: string | null
+  // 整词提交时最近一次输错的完整实际输入
+  lastWrongWord: string | null
   lastErrorSlip: boolean
   startTime: string
   endTime: string
@@ -34,6 +36,7 @@ export const initialWordState: WordState = {
   hasMadeInputWrong: false,
   wrongCount: 0,
   lastWrongInput: null,
+  lastWrongWord: null,
   lastErrorSlip: false,
   startTime: '',
   endTime: '',

@@ -27,7 +27,7 @@ export default function FeedbackSetting() {
       <div className={styles.section}>
         <span className={styles.sectionLabel}>词条反馈</span>
         <span className={styles.sectionDescription}>
-          拉黑词会从后续普通学习、复习和 GPT 训练中排除，但不会删除历史练习和 FSRS 状态。“没有帮助”只记录推荐偏好，取消拉黑时仍会保留。
+          拉黑词会从后续普通学习、复习和 GPT 训练中排除，但不会删除历史练习和 FSRS 状态。“写作不会用”是独立标记，不会跳过单词或改变复习时间。
         </span>
         <div className="w-full space-y-2 pl-4 pr-2" data-testid="blacklist-manager">
           {blacklisted.length === 0 ? (

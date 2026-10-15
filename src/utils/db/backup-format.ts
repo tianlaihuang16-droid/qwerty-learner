@@ -1,3 +1,5 @@
+import { isFsrsParameters, isFsrsWeights } from './fsrs-parameters'
+
 // Deliberately exclude analytics identifiers and machine-specific sync paths.
 const SETTINGS = [
   'currentDict',
@@ -21,6 +23,7 @@ const SETTINGS = [
   'dismissStartCardDate',
   'hasSeenEnhancedPromotion',
   'donateDate',
+  'fsrsParameters',
 ]
 const PROGRESS_PREFIX = 'qwertyTypingProgress:v1:'
 export type BackupStorage = Record<string, string>
@@ -114,6 +117,11 @@ export function parseBackup(json: string): { database: Blob; storage?: BackupSto
     if (table.name === 'wordRecords') {
       for (const chunk of chunks) {
         for (const row of chunk.rows) {
+          if (row?.spacedReviewDecision?.schedulerWeights !== undefined && !isFsrsWeights(row.spacedReviewDecision.schedulerWeights))
+            throw new Error('备份中的历史 FSRS 参数无效')
+          if (row?.spacedReviewDecision?.schedulerParamsVersion !== undefined &&
+            row.spacedReviewDecision.schedulerParamsVersion !== 'fsrs6-default-1' && row.spacedReviewDecision.schedulerWeights === undefined)
+            throw new Error('备份中的历史 FSRS 参数缺失')
           // v1 used errorCount; normalize it before replaying history.
           if (row && row.wrongCount === undefined && Number.isFinite(row.errorCount)) row.wrongCount = row.errorCount
           if (
@@ -147,6 +155,10 @@ export function parseBackup(json: string): { database: Blob; storage?: BackupSto
             typeof row.blacklisted !== 'boolean' ||
             !Number.isInteger(row.notHelpfulCount) ||
             row.notHelpfulCount < 0 ||
+            (row.needsWritingExample !== undefined && typeof row.needsWritingExample !== 'boolean') ||
+            (row.lastWritingUseMarkedAt !== undefined && !Number.isFinite(row.lastWritingUseMarkedAt)) ||
+            (row.helpful !== undefined && typeof row.helpful !== 'boolean') ||
+            (row.lastHelpfulMarkedAt !== undefined && !Number.isFinite(row.lastHelpfulMarkedAt)) ||
             !Number.isFinite(row.updatedAt)
           ) {
             throw new Error('备份中的词条反馈无效，未更改现有记录')
@@ -169,6 +181,7 @@ export function parseBackup(json: string): { database: Blob; storage?: BackupSto
       // Date-only promotional preferences were stored without JSON encoding.
       if (key !== 'donateDate') {
         const parsed = JSON.parse(value)
+        if (key === 'fsrsParameters' && !isFsrsParameters(parsed)) throw new Error('备份中的 FSRS 参数无效')
         if (key.startsWith(PROGRESS_PREFIX) && (parsed?.version !== 1 || !parsed.snapshot?.chapterData || !parsed.snapshot?.timerData)) {
           throw new Error('备份中的章节进度无效')
         }

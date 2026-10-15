@@ -1,12 +1,8 @@
+import type { GalleryLearningResult } from './hooks/useGalleryLearningSnapshot'
 import { currentChapterAtom, currentDictIdAtom, reviewModeInfoAtom } from '@/store'
-import {
-  generateAllSpacedReviewRecord,
-  generateSoonDueSpacedReviewRecord,
-  getAllSpacedReviewSummary,
-  getSoonDueReviewSummary,
-} from '@/utils/db/spaced-review-service'
+import { generateAllSpacedReviewRecord, generateSoonDueSpacedReviewRecord } from '@/utils/db/spaced-review-service'
 import { useSetAtom } from 'jotai'
-import { useCallback, useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import PajamasReviewList from '~icons/pajamas/review-list'
 
@@ -18,9 +14,9 @@ type Summary = {
 
 const EMPTY_SUMMARY: Summary = { dueCount: 0, gptAdjustedCount: 0 }
 
-export default function TodaySpacedReviewCard() {
-  const [summary, setSummary] = useState<Summary>(EMPTY_SUMMARY)
-  const [soonDue, setSoonDue] = useState<{ count: number; nextReviewAt?: number }>({ count: 0 })
+export default function TodaySpacedReviewCard({ learning }: { learning: GalleryLearningResult }) {
+  const summary = learning.review?.summary ?? EMPTY_SUMMARY
+  const soonDue = learning.review?.soonDue ?? { count: 0, nextReviewAt: undefined }
   const [isStarting, setIsStarting] = useState(false)
   const [isAdvancing, setIsAdvancing] = useState(false)
   const [message, setMessage] = useState('')
@@ -28,16 +24,6 @@ export default function TodaySpacedReviewCard() {
   const setCurrentDictId = useSetAtom(currentDictIdAtom)
   const setCurrentChapter = useSetAtom(currentChapterAtom)
   const navigate = useNavigate()
-
-  const refresh = useCallback(async () => {
-    const [next, soon] = await Promise.all([getAllSpacedReviewSummary(), getSoonDueReviewSummary()])
-    setSummary(next)
-    setSoonDue(soon)
-  }, [])
-
-  useEffect(() => {
-    refresh().catch((error) => console.error('Failed to load all review summary', error))
-  }, [refresh])
 
   const startReview = async () => {
     if (summary.dueCount === 0 || isStarting) return
@@ -81,26 +67,30 @@ export default function TodaySpacedReviewCard() {
     summary.dueCount === 0 && soonDue.count > 0 && soonDue.nextReviewAt
       ? `${soonDue.count} 词将在 ${new Date(soonDue.nextReviewAt * 1000).toLocaleTimeString()} 到期`
       : summary.dueCount === 0 && summary.nextReviewAt
-        ? `下次复习：${new Date(summary.nextReviewAt * 1000).toLocaleString()}`
-        : summary.dueCount === 0
-          ? '练习单词后会自动加入复习计划'
-          : `点击开始本组，最多 30 词${summary.gptAdjustedCount ? ` · GPT 已调整 ${summary.gptAdjustedCount} 词` : ''}`
+      ? `下次复习：${new Date(summary.nextReviewAt * 1000).toLocaleString()}`
+      : summary.dueCount === 0
+      ? '练习单词后会自动加入复习计划'
+      : `点击开始本组，最多 30 词${summary.gptAdjustedCount ? ` · GPT 已调整 ${summary.gptAdjustedCount} 词` : ''}`
 
   return (
-    <div className="mb-10 w-full min-w-0 max-w-md">
+    <div className="w-full min-w-0">
       <button
         type="button"
         onClick={startReview}
         disabled={summary.dueCount === 0 || isStarting}
-        className="group flex w-full cursor-pointer items-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-500 p-5 text-left text-white shadow-lg transition hover:-translate-y-0.5 hover:shadow-xl disabled:cursor-default disabled:opacity-70 disabled:hover:translate-y-0"
+        className="group flex w-full cursor-pointer items-center rounded-2xl border border-stone-300 bg-stone-100 p-5 text-left text-stone-800 transition hover:border-orange-300 hover:bg-orange-50 disabled:cursor-default disabled:opacity-70 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-100 dark:hover:bg-stone-700"
       >
-        <div className="mr-4 rounded-xl bg-white/20 p-3">
+        <div className="mr-4 rounded-xl bg-white/60 p-3 text-stone-500 dark:bg-stone-700 dark:text-stone-300">
           <PajamasReviewList className="h-8 w-8" />
         </div>
         <div className="min-w-0">
-          <div className="text-xl font-semibold">FSRS 今日复习</div>
-          <div className="mt-1 text-lg">今日到期 {summary.dueCount} 词</div>
-          <div className="mt-1 truncate text-xs text-indigo-100">{isStarting ? '正在生成复习词书…' : nextText}</div>
+          <div className="text-sm font-medium text-stone-500 dark:text-stone-400">FSRS 今日复习</div>
+          <div className="mt-1 text-2xl font-semibold tracking-tight">
+            {learning.reviewError ? '复习统计暂不可用' : !learning.review ? '正在读取复习统计…' : `今日到期 ${summary.dueCount} 词`}
+          </div>
+          <div className="mt-2 text-xs leading-relaxed text-stone-500 dark:text-stone-400">
+            {isStarting ? '正在生成复习词书…' : nextText}
+          </div>
         </div>
       </button>
       {summary.dueCount === 0 && soonDue.count > 0 && (

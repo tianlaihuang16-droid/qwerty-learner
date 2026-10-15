@@ -5,9 +5,10 @@ import { useAtomValue } from 'jotai'
 import type { FormEvent } from 'react'
 import { useContext, useEffect, useRef } from 'react'
 
-export default function MobileInputHandler({ updateInput }: { updateInput: (updateObj: WordUpdateAction) => void }) {
+export default function MobileInputHandler({ updateInput, wholeWordSubmit }: { updateInput: (updateObj: WordUpdateAction) => void; wholeWordSubmit?: boolean }) {
   const { state, dispatch } = useContext(TypingContext)!
-  const isWholeWordSubmit = useAtomValue(isWholeWordSubmitAtom)
+  const savedWholeWordSubmit = useAtomValue(isWholeWordSubmitAtom)
+  const isWholeWordSubmit = wholeWordSubmit ?? savedWholeWordSubmit
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -44,6 +45,11 @@ export default function MobileInputHandler({ updateInput }: { updateInput: (upda
           onFocus={() => { if (!state.isTyping) dispatch({ type: TypingStateActionType.SET_IS_TYPING, payload: true }) }}
           onInput={onInput}
           onKeyDown={(event) => {
+            if (event.key === 'Backspace' && isWholeWordSubmit) {
+              event.preventDefault()
+              updateInput({ type: 'delete', length: 1 })
+              return
+            }
             if (event.key === 'Enter' && isWholeWordSubmit) {
               event.preventDefault()
               updateInput({ type: 'submit' })

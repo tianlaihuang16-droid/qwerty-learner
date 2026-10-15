@@ -30,7 +30,16 @@ export function parseLocalDictionary(fileName, text) {
     const key = name.normalize('NFC').toLowerCase()
     if (seen.has(key)) continue
     seen.add(key)
-    words.push({ name, trans, usphone: entry.usphone ?? '', ukphone: entry.ukphone ?? '' })
+    const optional = {}
+    if (entry.spellings !== undefined) {
+      if (!Array.isArray(entry.spellings) || !entry.spellings.every(item => typeof item === 'string' && item.trim().length > 0 && item.length <= 100)) throw new Error(`第 ${index + 1} 个单词的 spellings 无效`)
+      optional.spellings = entry.spellings
+    }
+    if (entry.segments !== undefined) {
+      if (!Array.isArray(entry.segments) || entry.segments.length === 0 || !entry.segments.every(item => typeof item === 'string' && item.trim().length > 0) || entry.segments.join('') !== name) throw new Error(`第 ${index + 1} 个单词的 segments 必须完整拼接为 name`)
+      optional.segments = entry.segments
+    }
+    words.push({ name, trans, usphone: entry.usphone ?? '', ukphone: entry.ukphone ?? '', ...optional })
   }
   if (words.length === 0) throw new Error('辞书至少包含一个单词')
   return words

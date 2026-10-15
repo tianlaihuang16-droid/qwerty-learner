@@ -11,6 +11,7 @@ import WordList from './components/WordList'
 import WordPanel from './components/WordPanel'
 import { useConfetti } from './hooks/useConfetti'
 import { useWordList } from './hooks/useWordList'
+import './practice.css'
 import { TypingContext, TypingStateActionType, initialState, typingReducer } from './store'
 import type { TypingState } from './store/type'
 import Header from '@/components/Header'
@@ -21,6 +22,7 @@ import {
   currentChapterAtom,
   currentDictIdAtom,
   isReviewModeAtom,
+  lastLearningDictIdAtom,
   pronunciationConfigAtom,
   randomConfigAtom,
   reviewModeInfoAtom,
@@ -77,6 +79,10 @@ const App: React.FC<{ restored?: TypingState }> = ({ restored }) => {
 
   const reviewModeInfo = useAtomValue(reviewModeInfoAtom)
   const isReviewMode = useAtomValue(isReviewModeAtom)
+  const setLastLearningDictId = useSetAtom(lastLearningDictIdAtom)
+  useEffect(() => {
+    if (!isReviewMode && idDictionaryMap[currentDictId]) setLastLearningDictId(currentDictId)
+  }, [currentDictId, isReviewMode, setLastLearningDictId])
   const training = isReviewMode ? reviewModeInfo.reviewRecord?.gptTraining : undefined
   const trainingSaveError = useTrainingPersistence(training, state)
   const progressDictId = isReviewMode ? `review-${reviewModeInfo.reviewRecord?.id ?? 'unsaved'}` : currentDictId
@@ -146,14 +152,29 @@ const App: React.FC<{ restored?: TypingState }> = ({ restored }) => {
   }, [currentChapter, dictionaryComplete, isLoading, isReviewMode, setCurrentChapter, sliceIndex])
 
   useEffect(() => {
-    if (isReviewMode || activeBatchSlice === undefined || isLoading || learningStateStatus !== 'ready' || words.length > 0 || state.isFinished) return
+    if (
+      isReviewMode ||
+      activeBatchSlice === undefined ||
+      isLoading ||
+      learningStateStatus !== 'ready' ||
+      words.length > 0 ||
+      state.isFinished
+    )
+      return
     setBatchDisplayState('loading')
     setActiveBatchSlice(undefined)
     setupSignatureRef.current = ''
   }, [activeBatchSlice, isLoading, isReviewMode, learningStateStatus, state.isFinished, words.length])
 
   useEffect(() => {
-    if (isLoading || (!isReviewMode && ((!dictionaryComplete && currentChapter !== sliceIndex) || learningStateStatus === 'error' || (activeBatchSlice !== undefined && words.length === 0 && !state.isFinished)))) return
+    if (
+      isLoading ||
+      (!isReviewMode &&
+        ((!dictionaryComplete && currentChapter !== sliceIndex) ||
+          learningStateStatus === 'error' ||
+          (activeBatchSlice !== undefined && words.length === 0 && !state.isFinished)))
+    )
+      return
     if (!isReviewMode && dictionaryComplete) {
       setupSignatureRef.current = ''
       setDisplaySkippedCount(0)
@@ -278,84 +299,86 @@ const App: React.FC<{ restored?: TypingState }> = ({ restored }) => {
 
   return (
     <TypingContext.Provider value={{ state: state, dispatch }}>
-      {batchDisplayState === 'ready' &&
-        state.isFinished &&
-        (training ? <TrainingResult context={training} state={state} /> : <ResultScreen onContinueDictionary={continueDictionary} />)}
-      <Layout>
-        <Header>
-          <DictChapterButton />
-          <PronunciationSwitcher />
-          {!training && <Switcher />}
-          <div ref={setFeedbackTarget} className="shrink-0" />
-          <StartButton isLoading={isLoading || learningStateStatus === 'error' || batchDisplayState !== 'ready' || !audio.isReady} />
-          <Tooltip content="跳过该词">
-            <button
-              className={`${
-                batchDisplayState === 'ready' && state.isShowSkip ? 'bg-orange-400' : 'invisible w-0 bg-gray-300 px-0 opacity-0'
-              } my-btn-primary transition-all duration-300 `}
-              onClick={skipWord}
-            >
-              Skip
-            </button>
-          </Tooltip>
-        </Header>
-        <div className="container mx-auto flex h-full flex-1 flex-col items-center justify-center pb-5">
-          {trainingSaveError && (
-            <p role="alert" className="text-red-600">
-              {trainingSaveError}
-            </p>
-          )}
-          {learningStateStatus === 'error' && !isReviewMode && (
-            <p role="alert" className="mt-3 text-sm text-amber-600 dark:text-amber-400" data-testid="learning-state-warning">
-              学习状态暂时不可用；为避免混入已学词，本轮已暂停。请重启应用后重试。
-            </p>
-          )}
-          {displaySkippedCount > 0 && batchDisplayState === 'ready' && (
-            <p className="mt-3 text-sm text-gray-500 dark:text-gray-400" data-testid="learned-skip-count">
-              本轮已跳过 {displaySkippedCount} 个已学习或拉黑单词
-            </p>
-          )}
-          {audio.enabled && !state.isFinished && state.chapterData.words.length > 0 && (
-            <div className="mt-3 text-center text-sm text-gray-500" data-testid="chapter-audio" aria-live="polite">
-              {audio.complete
-                ? `本组读音${'__TAURI_IPC__' in window ? '已缓存' : '可播放'} ${audio.ready}/${audio.total}`
-                : `正在后台${'__TAURI_IPC__' in window ? '缓存' : '准备'}本组读音 ${audio.ready}/${audio.total}，未准备好的词不会播放`}
-              {audio.synthesized > 0 && <span> · {audio.synthesized} 词使用微软离线合成读音</span>}
-              {audio.complete && audio.failed.length > 0 && (
-                <div className="mt-2 flex items-center justify-center gap-3">
-                  <span>{audio.failed.length} 词暂时没有读音</span>
-                  <button className="my-btn-primary" onClick={audio.retry}>
-                    重试读音
-                  </button>
-                  <button className="my-btn-secondary" onClick={() => setPronunciation((old) => ({ ...old, isOpen: false }))}>
-                    关闭发音继续
-                  </button>
-                </div>
-              )}
+      <div className="practice-page">
+        {batchDisplayState === 'ready' &&
+          state.isFinished &&
+          (training ? <TrainingResult context={training} state={state} /> : <ResultScreen onContinueDictionary={continueDictionary} />)}
+        <Layout>
+          <Header>
+            <DictChapterButton />
+            <PronunciationSwitcher />
+            {!training && <Switcher />}
+            <div ref={setFeedbackTarget} className="shrink-0" />
+            <StartButton isLoading={isLoading || learningStateStatus === 'error' || batchDisplayState !== 'ready' || !audio.isReady} />
+            <Tooltip content="跳过该词">
+              <button
+                className={`${
+                  batchDisplayState === 'ready' && state.isShowSkip ? 'bg-orange-400' : 'invisible w-0 bg-gray-300 px-0 opacity-0'
+                } my-btn-primary transition-all duration-300 `}
+                onClick={skipWord}
+              >
+                Skip
+              </button>
+            </Tooltip>
+          </Header>
+          <div className="practice-body container mx-auto flex h-full flex-1 flex-col items-center justify-center pb-5">
+            {trainingSaveError && (
+              <p role="alert" className="text-red-600">
+                {trainingSaveError}
+              </p>
+            )}
+            {learningStateStatus === 'error' && !isReviewMode && (
+              <p role="alert" className="mt-3 text-sm text-amber-600 dark:text-amber-400" data-testid="learning-state-warning">
+                学习状态暂时不可用；为避免混入已学词，本轮已暂停。请重启应用后重试。
+              </p>
+            )}
+            {displaySkippedCount > 0 && batchDisplayState === 'ready' && (
+              <p className="mt-3 text-sm text-gray-500 dark:text-gray-400" data-testid="learned-skip-count">
+                本轮已跳过 {displaySkippedCount} 个已学习或拉黑单词
+              </p>
+            )}
+            {audio.enabled && !state.isFinished && state.chapterData.words.length > 0 && (
+              <div className="mt-3 text-center text-sm text-gray-500" data-testid="chapter-audio" aria-live="polite">
+                {audio.complete
+                  ? `本组读音可播放 ${audio.ready}/${audio.total}`
+                  : `正在后台缓存本组读音 ${audio.ready}/${audio.total}，未缓存好的词不会播放`}
+                {audio.synthesized > 0 && <span> · {audio.synthesized} 词使用浏览器读音读音</span>}
+                {audio.complete && audio.failed.length > 0 && (
+                  <div className="mt-2 flex items-center justify-center gap-3">
+                    <span>{audio.failed.length} 词暂时没有读音</span>
+                    <button className="my-btn-primary" onClick={audio.retry}>
+                      重试读音
+                    </button>
+                    <button className="my-btn-secondary" onClick={() => setPronunciation((old) => ({ ...old, isOpen: false }))}>
+                      关闭发音继续
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+            <div className="practice-workspace container relative mx-auto flex h-full flex-col items-center">
+              <div className="practice-stage container flex flex-grow items-center justify-center">
+                {learningStateStatus === 'error' && !isReviewMode ? (
+                  <p className="text-sm text-amber-600 dark:text-amber-400">无法确认哪些词是新词，当前不会开始普通学习。</p>
+                ) : isLoading || batchDisplayState === 'loading' ? (
+                  <div className="flex flex-col items-center justify-center ">
+                    <div
+                      className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid  border-indigo-400 border-r-transparent align-[-0.125em] motion-reduce:animate-[spin_1.5s_linear_infinite]"
+                      role="status"
+                    ></div>
+                  </div>
+                ) : batchDisplayState === 'dictionary-complete' ? (
+                  <DictionaryCompleteState allLearned={allLearned} onReturnToDictionary={returnToDictionary} />
+                ) : (
+                  !state.isFinished && <WordPanel feedbackTarget={feedbackTarget} />
+                )}
+              </div>
+              <Speed />
             </div>
-          )}
-          <div className="container relative mx-auto flex h-full flex-col items-center">
-            <div className="container flex flex-grow items-center justify-center">
-              {learningStateStatus === 'error' && !isReviewMode ? (
-                <p className="text-sm text-amber-600 dark:text-amber-400">无法确认哪些词是新词，当前不会开始普通学习。</p>
-              ) : isLoading || batchDisplayState === 'loading' ? (
-                <div className="flex flex-col items-center justify-center ">
-                  <div
-                    className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid  border-indigo-400 border-r-transparent align-[-0.125em] motion-reduce:animate-[spin_1.5s_linear_infinite]"
-                    role="status"
-                  ></div>
-                </div>
-              ) : batchDisplayState === 'dictionary-complete' ? (
-                <DictionaryCompleteState allLearned={allLearned} onReturnToDictionary={returnToDictionary} />
-              ) : (
-                !state.isFinished && <WordPanel feedbackTarget={feedbackTarget} />
-              )}
-            </div>
-            <Speed />
           </div>
-        </div>
-      </Layout>
-      {!training && batchDisplayState === 'ready' && <WordList />}
+        </Layout>
+        {!training && batchDisplayState === 'ready' && <WordList />}
+      </div>
     </TypingContext.Provider>
   )
 }

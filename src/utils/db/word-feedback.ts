@@ -1,7 +1,11 @@
 import type { WordLearningIdentity } from './word-learning-identity'
 import { mergeSourceDicts, serializedWordLearningKey, wordLearningIdentity } from './word-learning-identity'
 
-export type WordFeedbackAction = { type: 'blacklist'; value: boolean } | { type: 'not-helpful' }
+export type WordFeedbackAction =
+  | { type: 'blacklist'; value: boolean }
+  | { type: 'not-helpful' }
+  | { type: 'writing-use'; value: boolean }
+  | { type: 'helpful'; value: boolean }
 
 export interface IWordFeedback extends WordLearningIdentity {
   word: string
@@ -10,6 +14,10 @@ export interface IWordFeedback extends WordLearningIdentity {
   blacklistedAt?: number
   notHelpfulCount: number
   lastNotHelpfulAt?: number
+  needsWritingExample?: boolean
+  lastWritingUseMarkedAt?: number
+  helpful?: boolean
+  lastHelpfulMarkedAt?: number
   updatedAt: number
 }
 
@@ -30,6 +38,10 @@ export function updateWordFeedback(
     blacklistedAt: previous?.blacklistedAt,
     notHelpfulCount: previous?.notHelpfulCount ?? 0,
     lastNotHelpfulAt: previous?.lastNotHelpfulAt,
+    needsWritingExample: previous?.needsWritingExample ?? false,
+    lastWritingUseMarkedAt: previous?.lastWritingUseMarkedAt,
+    helpful: previous?.helpful ?? false,
+    lastHelpfulMarkedAt: previous?.lastHelpfulMarkedAt,
     updatedAt: now,
   }
 
@@ -37,16 +49,30 @@ export function updateWordFeedback(
     next.blacklisted = action.value
     if (action.value) next.blacklistedAt = previous?.blacklisted ? previous.blacklistedAt ?? now : now
     else delete next.blacklistedAt
-  } else {
+  } else if (action.type === 'not-helpful') {
     next.notHelpfulCount += 1
     next.lastNotHelpfulAt = now
+  } else if (action.type === 'writing-use') {
+    next.needsWritingExample = action.value
+    if (action.value) {
+      next.lastWritingUseMarkedAt = now
+      next.helpful = false
+      delete next.lastHelpfulMarkedAt
+    } else delete next.lastWritingUseMarkedAt
+  } else {
+    next.helpful = action.value
+    if (action.value) {
+      next.lastHelpfulMarkedAt = now
+      next.needsWritingExample = false
+      delete next.lastWritingUseMarkedAt
+    } else delete next.lastHelpfulMarkedAt
   }
 
   return next
 }
 
-export function isFeedbackActive(feedback: Pick<IWordFeedback, 'blacklisted' | 'notHelpfulCount'>) {
-  return feedback.blacklisted || feedback.notHelpfulCount > 0
+export function isFeedbackActive(feedback: Pick<IWordFeedback, 'blacklisted' | 'notHelpfulCount' | 'needsWritingExample' | 'helpful'>) {
+  return feedback.blacklisted || feedback.notHelpfulCount > 0 || feedback.needsWritingExample === true || feedback.helpful === true
 }
 
 export function wordFeedbackMap(feedback: readonly IWordFeedback[]) {

@@ -19,6 +19,11 @@ async function main() {
   assert.throws(() => parseLocalDictionary('bad.json', '{'), /JSON/)
   assert.throws(() => parseLocalDictionary('empty.json', '[]'), /至少包含一个/)
   assert.throws(() => parseLocalDictionary('bad.json', '[{"name":42}]'), /第 1 个单词/)
+  const extended = parseLocalDictionary('variants.json', JSON.stringify([{ name: 'unhelpful', segments: ['un', 'help', 'ful'], spellings: ['unhelpful'] }]))[0]
+  assert.deepEqual(extended.segments, ['un', 'help', 'ful'])
+  assert.deepEqual(extended.spellings, ['unhelpful'])
+  assert.throws(() => parseLocalDictionary('bad.json', JSON.stringify([{ name: 'word', segments: ['w', 'bad'] }])), /segments/)
+  assert.throws(() => parseLocalDictionary('bad.json', JSON.stringify([{ name: 'word', spellings: [''] }])), /spellings/)
   console.log('local dictionary parsing: pass')
 }
 

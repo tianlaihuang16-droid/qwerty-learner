@@ -21,7 +21,7 @@ export default function Progress({ className }: { className?: string }) {
   }, [state.spellingSession.mainCursor, state.chapterData.words.length])
 
   return (
-    <div className={`relative w-1/4 pt-1 ${className}`}>
+    <div className={`practice-progress relative w-1/4 pt-1 ${className}`}>
       <div className="mb-4 flex h-2 overflow-hidden rounded-xl bg-indigo-100 text-xs transition-all duration-300 dark:bg-indigo-200">
         <div
           style={{ width: `${progress}%` }}

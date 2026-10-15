@@ -4,7 +4,8 @@ import type {
 } from './record'
 import type { WordLearningIdentity } from './word-learning-identity'
 import { mergeSourceDicts } from './word-learning-identity'
-import { createEmptyCard, default_w, fsrs, Rating, State } from 'ts-fsrs'
+import { DEFAULT_FSRS_VERSION, DEFAULT_FSRS_WEIGHTS, getFsrsParameters, weightsForDecision } from './fsrs-parameters'
+import { Rating, State, createEmptyCard, fsrs } from 'ts-fsrs'
 import type { Card, Grade } from 'ts-fsrs'
 
 // Historical progress bands kept for the existing dictionary progress display.
@@ -22,10 +23,10 @@ export const EBBINGHAUS_INTERVAL_MINUTES = [
 ]
 // These are display bands for historical progress, not scheduling intervals.
 export const SPACED_REVIEW_ALGORITHM = 'fsrs-6-ts-fsrs-5.4.2'
-export const FSRS_PARAMETERS_VERSION = 'fsrs6-default-1'
-export const FSRS_WEIGHTS = [...default_w]
+export const FSRS_PARAMETERS_VERSION = DEFAULT_FSRS_VERSION
+export const FSRS_WEIGHTS = DEFAULT_FSRS_WEIGHTS
 export const FSRS_DESIRED_RETENTION = 0.9
-const scheduler = fsrs({ request_retention: FSRS_DESIRED_RETENTION, w: FSRS_WEIGHTS,
+const schedulerFor = (weights: number[]) => fsrs({ request_retention: FSRS_DESIRED_RETENTION, w: weights,
   enable_fuzz: false, enable_short_term: true, learning_steps: ['10m'], relearning_steps: ['10m'] })
 
 function snapshot(card: Card): FsrsCardSnapshot {
@@ -42,6 +43,16 @@ function restoreCard(saved: FsrsCardSnapshot): Card {
     reps: saved.reps, lapses: saved.lapses, state: saved.state as State }
 }
 
+export function getFsrsMemoryMetrics(state: Pick<ISpacedReviewState, 'fsrsCard'>, nowMs = Date.now(), weights = getFsrsParameters().weights) {
+  const saved = state.fsrsCard
+  if (!saved) return null
+  return {
+    retrievability: saved.lastReviewMs === undefined ? null : schedulerFor(weights).get_retrievability(restoreCard(saved), new Date(nowMs), false),
+    difficulty: saved.difficulty,
+    stability: saved.stability,
+  }
+}
+
 function cardBefore(previous: ISpacedReviewState | undefined, nowMs: number): Card {
   if (previous?.fsrsCard) return restoreCard(previous.fsrsCard)
   if (!previous) return createEmptyCard(new Date(nowMs))
@@ -54,10 +65,10 @@ function cardBefore(previous: ISpacedReviewState | undefined, nowMs: number): Ca
     lapses: previous.lapses, state: State.Review }
 }
 
-export function nextFsrsCard(before: FsrsCardSnapshot | null, atMs: number, rating: SpacedReviewRating) {
+export function nextFsrsCard(before: FsrsCardSnapshot | null, atMs: number, rating: SpacedReviewRating, weights = getFsrsParameters().weights) {
   const card = before ? restoreCard(before) : createEmptyCard(new Date(atMs))
   const grade = { again: Rating.Again, hard: Rating.Hard, good: Rating.Good, easy: Rating.Easy }[rating]
-  return snapshot(scheduler.next(card, new Date(atMs), grade as Grade).card)
+  return snapshot(schedulerFor(weights).next(card, new Date(atMs), grade as Grade).card)
 }
 
 function scheduledReviewAt(timeStamp: number, intervalMinutes: number) {
@@ -157,6 +168,13 @@ export function rateSpellingAttempt(record: ReviewInput): SpacedReviewRating {
 
 export const rateWordAttempt = rateSpellingAttempt
 
+export function canManuallyRateSpelling(record: ReviewInput): boolean {
+  const trace = record.spelling
+  return record.wrongCount === 0 && trace?.outcome === 'completed' &&
+    trace.attempts.some((attempt) => attempt.outcome === 'correct') &&
+    !trace.attempts.some((attempt) => attempt.outcome === 'error')
+}
+
 export function calculateSpacedReviewState(
   previous: ISpacedReviewState | undefined,
   record: ReviewInput,
@@ -170,6 +188,7 @@ export function decideSpacedReview(
   record: ReviewInput,
   identity: WordLearningIdentity,
 ): ISpacedReviewDecision & { state: ISpacedReviewState } {
+  const parameters = weightsForDecision(record.spacedReviewDecision)
   const storedRating = record.spacedReviewDecision?.algorithm === SPACED_REVIEW_ALGORITHM &&
     record.spacedReviewDecision.ratingSource === 'manual' ? record.spacedReviewDecision.rating : undefined
   const classified = classifySpacedReviewEvidence(record)
@@ -188,7 +207,8 @@ export function decideSpacedReview(
     algorithm: SPACED_REVIEW_ALGORITHM,
     rating,
     ratingSource: storedRating ? 'manual' as const : 'automatic' as const,
-    schedulerParamsVersion: FSRS_PARAMETERS_VERSION,
+    schedulerParamsVersion: parameters.version,
+    schedulerWeights: [...parameters.weights],
     evidence,
     dueAtStart,
     isDue,
@@ -227,7 +247,7 @@ export function decideSpacedReview(
   }
   const atMs = record.spelling?.completedAtMs ?? record.timeStamp * 1000
   const before = snapshot(cardBefore(previous, atMs))
-  const next = nextFsrsCard(before, atMs, rating)
+  const next = nextFsrsCard(before, atMs, rating, parameters.weights)
   const intervalMinutes = Math.max(0, (next.dueMs - atMs) / 60000)
   const stage = EBBINGHAUS_INTERVAL_MINUTES.reduce((band, minimum, index) =>
     intervalMinutes >= minimum ? index : band, 0)

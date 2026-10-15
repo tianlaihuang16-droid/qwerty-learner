@@ -28,13 +28,15 @@ export default function DictionaryComponent({ dictionary }: Props) {
       <DialogTrigger asChild>
         <div
           ref={divRef}
-          className={`group flex min-h-40 w-full min-w-0 cursor-pointer items-center justify-center overflow-hidden rounded-lg p-4 text-left shadow-lg focus:outline-none ${
+          data-testid="dictionary-card"
+          data-selected={isSelected}
+          className={`min-h-40 group flex w-full min-w-0 cursor-pointer items-center justify-center overflow-hidden rounded-lg p-4 text-left shadow-lg focus:outline-none ${
             isSelected ? 'bg-indigo-400' : 'bg-zinc-50 hover:bg-white dark:bg-gray-800 dark:hover:bg-gray-700'
           }`}
           role="button"
           // onClick={onClick}
         >
-          <div className="relative ml-1 flex h-full min-w-0 w-full flex-col items-start justify-start">
+          <div className="relative ml-1 flex h-full w-full min-w-0 flex-col items-start justify-start">
             <h1
               className={`mb-1.5 line-clamp-2 min-h-[3.5rem] break-words pr-20 text-xl font-normal leading-7 ${
                 isSelected ? 'text-white' : 'text-gray-800 group-hover:text-indigo-400 dark:text-gray-200'
@@ -62,7 +64,10 @@ export default function DictionaryComponent({ dictionary }: Props) {
             <p className={`mb-0.5 font-bold  ${isSelected ? 'text-white' : 'text-gray-600 dark:text-gray-200'}`}>{dictionary.length} 词</p>
             <div className="mt-auto flex w-full min-w-0 items-center pt-2">
               {(learningProgress.status === 'idle' || learningProgress.status === 'loading') && (
-                <div className="h-2 w-[calc(100%-5rem)] animate-pulse rounded-full bg-slate-200 dark:bg-slate-600" aria-label="正在加载学习进度" />
+                <div
+                  className="h-2 w-[calc(100%-5rem)] animate-pulse rounded-full bg-slate-200 dark:bg-slate-600"
+                  aria-label="正在加载学习进度"
+                />
               )}
               {learningProgress.status === 'ready' && <DictionaryProgress progress={learningProgress.progress} variant="card" />}
               {learningProgress.status === 'error' && <span className="text-xs text-gray-500">进度暂不可用</span>}
